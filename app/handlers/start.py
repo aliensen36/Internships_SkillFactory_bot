@@ -10,7 +10,8 @@ from app.constants import courses
 from app.keyboards.reply import *
 from app.keyboards.inline import *
 from app.text import *
-from database.models import User
+from database.models import User, Project
+from database.orm_query import get_all_projects
 
 start_router = Router()
 
@@ -39,8 +40,9 @@ async def start_handler(message: Message, session: AsyncSession):
         await message.answer(about_bot_msg)
         # await asyncio.sleep(1)
         # Отправка кнопок с возможностью раскрытия текста
-        for title, key in hidden_texts.items():
-            await message.answer(title, reply_markup=get_hidden_text_keyboard(title),
+        projects = await get_all_projects(session)
+        for item in projects:
+            await message.answer(item.title, reply_markup=get_projects_keyboard(item.id),
                                  parse_mode="HTML")
             # await asyncio.sleep(1)
         # await asyncio.sleep(1)
@@ -56,13 +58,36 @@ async def start_handler(message: Message, session: AsyncSession):
                              reply_markup=kb_main)
 
 
-# Обработчик нажатия кнопки "📜 Прочитать"
-@start_router.callback_query(F.data.in_(hidden_texts.keys()))
-async def show_hidden_text(callback: CallbackQuery):
-    hidden_text = hidden_texts.get(callback.data)
-    if hidden_text:
-        await callback.answer()
-        await callback.message.edit_text(hidden_text, parse_mode="HTML")
+# Обработчик кнопки "📜 Прочитать"
+@start_router.message(F.text == "📜 Прочитать")
+async def send_projects_list(message: Message, session: AsyncSession):
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📜 Прочитать", callback_data=f"project_{project.id}")]
+        ])
+        await message.answer(project.title, reply_markup=keyboard, parse_mode="HTML")
+
+
+# Обработчик нажатия на кнопку "📜 Прочитать"
+@start_router.callback_query(F.data.startswith("project_"))
+async def show_project(callback: CallbackQuery, session: AsyncSession):
+    project_id_str = callback.data.split("project_")[1]
+
+    if not project_id_str.isdigit():
+        await callback.answer("Некорректный проект.")
+        return
+
+    project_id = int(project_id_str)
+    result = await session.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+
+    if project:
+        await callback.message.edit_text(project.content, parse_mode="HTML")
+    else:
+        await callback.answer("⚠️ Проект не найден.")
 
 
 # Выбор направления

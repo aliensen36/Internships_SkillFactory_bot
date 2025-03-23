@@ -17,10 +17,11 @@ def get_main_menu_keyboard():
 
 
 # Кнопка "Прочитать" для скрытого текста
-def get_hidden_text_keyboard(key: str) -> InlineKeyboardMarkup:
+def get_projects_keyboard(project_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📜 Прочитать", callback_data=key)]
+            [InlineKeyboardButton(text="📜 Прочитать",
+                                  callback_data=f"project_{project_id}")]
         ]
     )
 

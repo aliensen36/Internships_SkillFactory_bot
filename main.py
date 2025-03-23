@@ -11,7 +11,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import default_state, State, StatesGroup
 from middlewares.db import DataBaseSession
 from app.handlers.start import start_router
-
+from app.handlers.admin import admin_router
+from app.handlers.user_group import user_group_router
+from app.handlers.profile import profile_router
 
 
 logging.basicConfig(level=logging.INFO)
@@ -23,10 +25,10 @@ bot.admins_list = []
 
 dp = Dispatcher(storage=MemoryStorage())
 
-dp.include_router(start_router)
 dp.include_router(user_group_router)
-dp.include_router(router)
 dp.include_router(admin_router)
+dp.include_router(profile_router)
+dp.include_router(start_router)
 
 
 async def on_startup(bot):

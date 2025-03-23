@@ -145,4 +145,5 @@ cython_debug/
 
 alembic.ini
 alembic/
-fireplace_db.db
+fixtures/
+/sf_db.db

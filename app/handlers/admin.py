@@ -9,19 +9,12 @@ from sqlalchemy import select, func
 from datetime import datetime, timedelta
 from collections import defaultdict
 from app.fsm_states import BroadcastState
+from app.keyboards.reply import admin_main
 from database.models import User
 
 
 admin_router = Router()
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
-
-
-# Главная клавиатура
-admin_main = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='📢 Рассылка'), KeyboardButton(text='⬅️ Назад')],
-],
-    resize_keyboard=True,
-    input_field_placeholder='Выберите действие')
 
 
 @admin_router.message(Command("admin"))

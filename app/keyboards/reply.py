@@ -16,3 +16,11 @@ kb_profile = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="🔄 Изменить направление"), KeyboardButton(text="🔁 Изменить курс")],
     [KeyboardButton(text="🔙 Назад")]
 ], resize_keyboard=True)
+
+
+# Главная клавиатура админа
+admin_main = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='📢 Рассылка'), KeyboardButton(text='⬅️ Назад')],
+],
+    resize_keyboard=True,
+    input_field_placeholder='Выберите действие')

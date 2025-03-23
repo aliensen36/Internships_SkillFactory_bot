@@ -8,7 +8,7 @@ class Base(DeclarativeBase):
 
 
 class User(Base):
-    __tablename__ = 'user'
+    __tablename__ = 'users'
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tg_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
@@ -17,3 +17,12 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(150), nullable=True)
     specialization: Mapped[str] = mapped_column(String(150), nullable=True)
     course: Mapped[str] = mapped_column(String(200), nullable=True)
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+

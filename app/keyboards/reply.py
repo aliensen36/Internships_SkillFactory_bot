@@ -21,15 +21,16 @@ kb_profile = ReplyKeyboardMarkup(keyboard=[
 
 
 # Главная клавиатура админа
-admin_main = ReplyKeyboardMarkup(keyboard=[
+kb_admin_main = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='📚 Специализации и курсы'), KeyboardButton(text='📢 Рассылка')],
-    [KeyboardButton(text='📥 Добавить проект'), KeyboardButton(text='✏️ Изменить проект')],
-    [KeyboardButton(text='❌ Удалить проект')],
-    [KeyboardButton(text='⬅️ Назад')],
+    [KeyboardButton(text='📊 Статистика'), KeyboardButton(text='⬅️ Назад')],
 ],
     resize_keyboard=True,
     input_field_placeholder='Выберите действие')
 
+# [KeyboardButton(text='📥 Добавить проект')
+# KeyboardButton(text='✏️ Изменить проект')
+# [KeyboardButton(text='❌ Удалить проект')
 
 kb_specializations_courses = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text= '🎯 Специализации'), KeyboardButton(text='📚 Курсы')],
@@ -47,3 +48,14 @@ kb_specializations = ReplyKeyboardMarkup(keyboard=[
     resize_keyboard=True,
     input_field_placeholder='Выберите действие'
 )
+
+kb_courses = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Просмотр 👁️'), KeyboardButton(text='Добавить ➕')],
+    [KeyboardButton(text='Изменить ✏️'), KeyboardButton(text='Удалить 🗑️')],
+    [KeyboardButton(text='Назад ⬅️')],
+],
+    resize_keyboard=True,
+    input_field_placeholder='Выберите действие'
+)
+
+kb_courses

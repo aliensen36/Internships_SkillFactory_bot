@@ -1,8 +1,10 @@
 from aiogram.fsm.state import State, StatesGroup
 
-class BroadcastState(StatesGroup):
+class BroadcastStates(StatesGroup):
     waiting_for_text = State()
-    waiting_for_photo = State()
+    waiting_for_image = State()
+    waiting_for_courses = State()
+    confirmation = State()
 
 
 class ProjectAddState(StatesGroup):
@@ -10,5 +12,10 @@ class ProjectAddState(StatesGroup):
     content = State()
 
 
-class SpecializationStates(StatesGroup):
+class SpecializationState(StatesGroup):
     waiting_for_specialization_name = State()
+
+
+class CourseState(StatesGroup):
+    waiting_for_specialization = State()
+    waiting_for_course_name = State()

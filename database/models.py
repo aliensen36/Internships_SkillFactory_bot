@@ -1,9 +1,12 @@
+import json
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, Integer, Boolean, String, DateTime, Date, Time, func, ForeignKey, Text
+from sqlalchemy import BigInteger, Integer, Boolean, String, DateTime, Date, Time, func, ForeignKey, Text, select
 from sqlalchemy import BigInteger, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import func
+from typing import Optional, List
 
 # Базовый класс для всех моделей
 class Base(DeclarativeBase):
@@ -49,13 +52,26 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     specialization_id: Mapped[int] = mapped_column(Integer, ForeignKey('specializations.id'), nullable=False)
 
-    # Связь с пользователями
-    users: Mapped[list['User']] = relationship('User', back_populates='course')
-    # Связь с специализацией
-    specialization: Mapped['Specialization'] = relationship('Specialization', back_populates='courses')
+    # Связи
+    broadcasts: Mapped[List['Broadcast']] = relationship(
+        'Broadcast',
+        secondary='broadcast_course_association',
+        back_populates='courses',
+        lazy='selectin'
+    )
+    users: Mapped[list['User']] = relationship(
+        'User',
+        back_populates='course',
+        lazy='selectin'
+    )
+    specialization: Mapped['Specialization'] = relationship(
+        'Specialization',
+        back_populates='courses',
+        lazy='joined'
+    )
 
-
-
+    def __repr__(self):
+        return f"Course(id={self.id}, name='{self.name}')"
 
 
 class Project(Base):
@@ -65,3 +81,44 @@ class Project(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
+
+# Модель рассылки
+class Broadcast(Base):
+    __tablename__ = 'broadcasts'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    image_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    sent_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+
+    # Для SQLite используем JSON-сериализацию вместо ARRAY
+    course_ids: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # JSON-строка с массивом ID курсов
+
+    # Связь с курсами
+    courses: Mapped[List['Course']] = relationship(
+        'Course',
+        secondary='broadcast_course_association',
+        back_populates='broadcasts'
+    )
+
+    def set_course_ids(self, ids: List[int]):
+        """Установить список ID курсов"""
+        self.course_ids = json.dumps(ids)
+
+    def get_course_ids(self) -> List[int]:
+        """Получить список ID курсов"""
+        return json.loads(self.course_ids) if self.course_ids else []
+
+    async def get_recipients(self, session: AsyncSession) -> List[User]:
+        """Получить список пользователей для рассылки"""
+        result = await session.execute(
+            select(User).where(User.course_id.in_(self.get_course_ids())))
+        return result.scalars().all()
+
+
+class BroadcastCourseAssociation(Base):
+    __tablename__ = 'broadcast_course_association'
+
+    broadcast_id: Mapped[int] = mapped_column(ForeignKey('broadcasts.id'), primary_key=True)
+    course_id: Mapped[int] = mapped_column(ForeignKey('courses.id'), primary_key=True)

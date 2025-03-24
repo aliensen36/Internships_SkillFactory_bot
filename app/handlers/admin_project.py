@@ -4,7 +4,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import ProjectAddState
-from app.keyboards.reply import admin_main
+from app.keyboards.reply import kb_admin_main
 from database.models import Project
 
 
@@ -30,4 +30,4 @@ async def add_project_content(message: Message, state: FSMContext, session: Asyn
     session.add(new_project)
     await session.commit()
     await state.clear()
-    await message.answer("✅ Новый проект добавлен!", reply_markup=admin_main)
+    await message.answer("✅ Новый проект добавлен!", reply_markup=kb_admin_main)

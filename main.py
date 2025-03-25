@@ -17,6 +17,7 @@ from app.handlers.profile import profile_router
 from app.handlers.admin_project import admin_project_router
 from app.handlers.common import common_router
 from app.handlers.admin_spec_course import admin_spec_course_router
+from app.handlers.admin_broadcast import admin_broadcast_router
 
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +37,7 @@ dp.include_router(common_router)
 dp.include_router(admin_router)
 dp.include_router(admin_project_router)
 dp.include_router(admin_spec_course_router)
+dp.include_router(admin_broadcast_router)
 
 
 async def on_startup(bot):

@@ -6,38 +6,46 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 kb_main = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="ℹ️ О нас")],
-    [KeyboardButton(text="⭐ Главное меню"), KeyboardButton(text="👤 Мой профиль")],
+    [KeyboardButton(text="ℹ️ О нас"), KeyboardButton(text="⭐ Проекты")],
+    [KeyboardButton(text="👤 Мой профиль")],
 ],
-    resize_keyboard=True,
-    input_field_placeholder='Выберите действие')
+    resize_keyboard=True
+)
 
 
 # Клавиатура Профиля
 kb_profile = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="🔄 Изменить направление"), KeyboardButton(text="🔁 Изменить курс")],
-    [KeyboardButton(text="🔙 Назад")]
-], resize_keyboard=True)
+    [KeyboardButton(text="🔁 Изменить курс"), KeyboardButton(text="🔙 Назад")]
+],
+    resize_keyboard=True
+)
 
 
 # Главная клавиатура админа
 kb_admin_main = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='📚 Специализации и курсы'), KeyboardButton(text='📢 Рассылка')],
-    [KeyboardButton(text='📊 Статистика'), KeyboardButton(text='⬅️ Назад')],
+    [KeyboardButton(text='📁 Проекты'), KeyboardButton(text='📚 Специализации и курсы')],
+    [KeyboardButton(text='📢 Рассылка'), KeyboardButton(text='📊 Статистика')],
+    [KeyboardButton(text='⬅️ Назад')],
 ],
-    resize_keyboard=True,
-    input_field_placeholder='Выберите действие')
+    resize_keyboard=True
+)
 
-# [KeyboardButton(text='📥 Добавить проект')
-# KeyboardButton(text='✏️ Изменить проект')
-# [KeyboardButton(text='❌ Удалить проект')
+
+# Клавиатура проектов
+kb_admin_projects = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='📥 Добавить проект'), KeyboardButton(text='✏️ Изменить проект')],
+    [KeyboardButton(text='❌ Удалить проект'), KeyboardButton(text='⬅️ Назад')],
+],
+    resize_keyboard=True
+)
+
 
 kb_specializations_courses = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text= '🎯 Специализации'), KeyboardButton(text='📚 Курсы')],
     [KeyboardButton(text='⬅️ Назад')],
 ],
-    resize_keyboard=True,
-    input_field_placeholder='Выберите действие')
+    resize_keyboard=True
+)
 
 
 kb_specializations = ReplyKeyboardMarkup(keyboard=[
@@ -46,8 +54,8 @@ kb_specializations = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='⬅️ Назад')],
 ],
     resize_keyboard=True,
-    input_field_placeholder='Выберите действие'
 )
+
 
 kb_courses = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='Просмотр 👁️'), KeyboardButton(text='Добавить ➕')],
@@ -55,7 +63,5 @@ kb_courses = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='Назад ⬅️')],
 ],
     resize_keyboard=True,
-    input_field_placeholder='Выберите действие'
 )
 
-kb_courses

@@ -147,3 +147,4 @@ alembic.ini
 alembic/
 fixtures/
 /sf_db.db
+media/images

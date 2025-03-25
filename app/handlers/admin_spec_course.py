@@ -139,7 +139,7 @@ async def process_spec_choice(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 # ✅ Шаг 3: Сохраняем курс
-@admin_spec_course_router.message(CourseState.waiting_for_course_name)
+@admin_spec_course_router.message(CourseState.waiting_for_course)
 async def add_course_save(message: Message, state: FSMContext, session: AsyncSession):
     name = message.text.strip()
     data = await state.get_data()

@@ -4,11 +4,13 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
 from app.constants import COURSE_TITLES
-from app.keyboards.inline import kb_change_specialization, change_courses_keyboard
+from app.fsm_states import ChangeCourseState
+from app.keyboards.inline import *
 from app.keyboards.reply import kb_profile, kb_main
 from database.models import *
+from aiogram.exceptions import TelegramBadRequest
+
 
 profile_router = Router()
 
@@ -26,8 +28,8 @@ async def profile_handler(message: Message, session: AsyncSession):
         course = user.course.name if user.course else "не выбран"
         await message.answer(
             f"👤 <b>Твой профиль</b>\n\n"
-            f"🔸 Выбранное направление: <b>{specialization}</b>\n"
-            f"🔹 Выбранный курс: <b>{course}</b>",
+            f"🔸 Выбранна специализация:\n<b>{specialization}</b>\n\n"
+            f"🔹 Выбранный курс:\n<b>{course}</b>",
             parse_mode="HTML",
             reply_markup=kb_profile
         )
@@ -35,85 +37,111 @@ async def profile_handler(message: Message, session: AsyncSession):
         await message.answer("Профиль не найден. Попробуй снова /start.")
 
 
+
 @profile_router.message(F.text == "🔁 Изменить курс")
-async def change_course_start(message: Message, session: AsyncSession):
-    # Получаем все специализации
-    result = await session.execute(select(Specialization))
-    specializations = result.scalars().all()
+async def change_specialization_start(message: Message, state: FSMContext,
+                                session: AsyncSession):
+    await message.answer("🎯 Выберите специализацию:",
+                         reply_markup=await change_specialization_keyboard(session))
+    await state.set_state(ChangeCourseState.waiting_for_specialization)
 
-    # Создаем клавиатуру со специализациями
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=spec.name, callback_data=f"select_spec_{spec.id}")]
-            for spec in specializations
-        ]
-    )
 
-    await message.answer("🎯 Выберите специализацию:", reply_markup=keyboard)
-
-@profile_router.callback_query(F.data.startswith("select_spec_"))
-async def choose_course_after_spec(callback: CallbackQuery, session: AsyncSession):
-    spec_id = int(callback.data.replace("select_spec_", ""))
-
-    # Получаем специализацию и связанные курсы
-    spec_result = await session.execute(select(Specialization).filter(Specialization.id == spec_id))
-    specialization = spec_result.scalars().first()
-
-    if not specialization:
-        await callback.answer("❌ Специализация не найдена")
+@profile_router.callback_query(ChangeCourseState.waiting_for_specialization,
+                               F.data.startswith("change_spec_"))
+async def change_specialization(callback: CallbackQuery, state: FSMContext,
+                                session: AsyncSession):
+    spec_id = callback.data.replace("change_spec_", "").strip()
+    if not spec_id.isdigit():
+        await callback.answer("❌ Некорректный ID специализации.", show_alert=True)
         return
+    await state.update_data(spec_id=spec_id)
 
-    courses_result = await session.execute(
-        select(Course).filter(Course.specialization_id == spec_id)
-    )
-    courses = courses_result.scalars().all()
+    stmt = select(User).where(User.tg_id == callback.from_user.id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
 
-    if not courses:
-        await callback.message.edit_text("⚠️ Нет доступных курсов для этой специализации.")
-        return
+    if user:
+        spec_stmt = select(Specialization).where(Specialization.id == int(spec_id))
+        spec_result = await session.execute(spec_stmt)
+        specialization = spec_result.scalar_one_or_none()
 
-    # Создаем клавиатуру с курсами
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=course.name, callback_data=f"select_course_{course.id}_{spec_id}")]
-            for course in courses
-        ]
-    )
-
-    await callback.message.edit_text(f"🎓 Выбрана специализация: <b>{specialization.name}</b>\nТеперь выберите курс:", parse_mode="HTML", reply_markup=keyboard)
-
-@profile_router.callback_query(F.data.startswith("select_course_"))
-async def set_course_and_spec(callback: CallbackQuery, session: AsyncSession):
-    data = callback.data.replace("select_course_", "")
-    course_id_str, spec_id_str = data.split("_")
-    course_id = int(course_id_str)
-    spec_id = int(spec_id_str)
-
-    user_id = callback.from_user.id
-
-    async with session.begin():
-        result = await session.execute(select(User).filter(User.tg_id == user_id))
-        user = result.scalars().first()
-
-        course_result = await session.execute(select(Course).filter(Course.id == course_id))
-        course = course_result.scalars().first()
-
-        spec_result = await session.execute(select(Specialization).filter(Specialization.id == spec_id))
-        spec = spec_result.scalars().first()
-
-        if user and course and spec:
-            user.specialization_id = spec.id
-            user.course_id = course.id
+        if specialization:
+            user.specialization_id = specialization.id
             await session.commit()
 
             await callback.message.edit_text(
-                f"✅ Обновлено направление: <b>{spec.name}</b>\n✅ Обновлён курс: <b>{course.name}</b>",
+                f"✅ Выбрана специализация:\n\n<b>{specialization.name}</b>",
                 parse_mode="HTML"
             )
+            # Проверяем, есть ли курсы по этой специализации
+            keyboard = await change_courses_keyboard(session, user.specialization_id, 0)
+
+            if keyboard is None:
+                await callback.message.answer(
+                    "❌ Курсов не найдено. Выбери другую специализацию:",
+                    reply_markup=await specialization_keyboard(session)  # Подставляем клавиатуру выбора специализации
+                )
+            else:
+                await state.set_state(ChangeCourseState.waiting_for_course)
+                await callback.message.answer(
+                    "🎓 Теперь выбери курс, который тебя интересует:",
+                    reply_markup=keyboard
+                )
         else:
-            await callback.answer("❌ Ошибка при обновлении профиля. Попробуйте снова.")
+            await callback.answer("❌ Специализация не найдена.", show_alert=True)
+    else:
+        await callback.answer("❌ Пользователь не найден.", show_alert=True)
+
+
+@profile_router.callback_query(ChangeCourseState.waiting_for_course,
+                               F.data.startswith("change_course_"))
+async def change_course(callback: CallbackQuery, state: FSMContext,
+                        session: AsyncSession):
+    course_id = callback.data.replace("change_course_", "")
+
+    if not course_id.isdigit():
+        await callback.answer("❌ Некорректный ID курса.", show_alert=True)
+        return
+    await state.update_data(course_id=course_id)
+    stmt = select(Course).where(Course.id == int(course_id))
+    result = await session.execute(stmt)
+    course = result.scalar_one_or_none()
+
+    if course:
+        stmt = select(User).where(User.tg_id == callback.from_user.id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        user.course_id = course.id
+        await session.commit()
+
+        await callback.message.edit_text(
+            f"✅ Выбран курс:\n\n<b>{course.name}</b>",
+            parse_mode="HTML"
+        )
+    else:
+        await callback.answer("❌ Курс не найден.", show_alert=True)
+    await state.clear()
+
+
+# Пагинация при изменении курса
+@profile_router.callback_query(F.data.startswith("changepage_"))
+async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
+    _, specialization_id, page = callback.data.split("_")
+
+    if not specialization_id.isdigit() or not page.isdigit():
+        await callback.answer("❌ Некорректный запрос.", show_alert=True)
+        return
+
+    specialization_id, page = int(specialization_id), int(page)
+
+    keyboard = await change_courses_keyboard(session, specialization_id, page)
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except TelegramBadRequest:
+        pass  # Игнорируем, если клавиатура не изменилась
 
 
 @profile_router.message(F.text == "🔙 Назад")
 async def back_to_main_menu(message: Message):
-    await message.answer("🔙 Возврат в главное меню.", reply_markup=kb_main)
+    await message.answer("Главное меню", reply_markup=kb_main)

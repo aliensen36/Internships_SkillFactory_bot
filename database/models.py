@@ -1,3 +1,4 @@
+import os
 import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -7,6 +8,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import func
 from typing import Optional, List
+from sqlalchemy.ext.hybrid import hybrid_property
 
 # Базовый класс для всех моделей
 class Base(DeclarativeBase):
@@ -31,6 +33,15 @@ class User(Base):
     specialization: Mapped['Specialization'] = relationship('Specialization', back_populates='users')
     # Связь с курсом
     course: Mapped['Course'] = relationship('Course', back_populates='users')
+
+    @hybrid_property
+    def specialization_name(self):
+        return self.specialization.name if self.specialization else None
+
+    @hybrid_property
+    def course_name(self):
+        return self.course.name if self.course else None
+
 
 # Модель специализаций
 class Specialization(Base):
@@ -115,6 +126,16 @@ class Broadcast(Base):
         result = await session.execute(
             select(User).where(User.course_id.in_(self.get_course_ids())))
         return result.scalars().all()
+
+    async def set_image_path(self, image_filename: str):
+        """Метод для установки пути к изображению в базе данных."""
+        # Путь к изображению относительно директории проекта
+        image_dir = 'media/images/'  # Папка для хранения изображений
+        self.image_path = os.path.join(image_dir, image_filename)
+
+    def get_image_url(self):
+        """Метод для получения полного пути к изображению (если необходимо)."""
+        return self.image_path
 
 
 class BroadcastCourseAssociation(Base):

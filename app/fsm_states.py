@@ -1,8 +1,8 @@
 from aiogram.fsm.state import State, StatesGroup
 
-class BroadcastStates(StatesGroup):
+class BroadcastState(StatesGroup):
     waiting_for_text = State()
-    waiting_for_image = State()
+    waiting_for_photo = State()
     waiting_for_courses = State()
     confirmation = State()
 
@@ -18,4 +18,16 @@ class SpecializationState(StatesGroup):
 
 class CourseState(StatesGroup):
     waiting_for_specialization = State()
-    waiting_for_course_name = State()
+    waiting_for_course = State()
+
+class ChangeCourseState(StatesGroup):
+    waiting_for_specialization = State()
+    waiting_for_course = State()
+
+# Состояния для меню
+class MenuState(StatesGroup):
+    main_menu = State()
+    level_1_menu = State()
+    level_2_menu = State()
+    level_3_menu = State()
+    level_4_menu = State()

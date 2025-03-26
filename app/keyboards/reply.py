@@ -1,16 +1,30 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.models import Project
 
 # Главное меню
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
 kb_main = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="ℹ️ О нас"), KeyboardButton(text="⭐ Проекты")],
     [KeyboardButton(text="👤 Мой профиль")],
 ],
     resize_keyboard=True
 )
+
+
+# Клавиатура для проектов
+async def projects_keyboard(session: AsyncSession):
+    builder = ReplyKeyboardBuilder()
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        builder.button(text=project.title)
+    builder.adjust(2)
+    return builder
 
 
 # Клавиатура Профиля

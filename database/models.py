@@ -70,6 +70,10 @@ class Course(Base):
         back_populates='courses',
         lazy='selectin'
     )
+    broadcast_associations: Mapped[List['BroadcastCourseAssociation']] = relationship(
+        'BroadcastCourseAssociation',
+        back_populates='course'
+    )
     users: Mapped[list['User']] = relationship(
         'User',
         back_populates='course',
@@ -92,6 +96,18 @@ class Project(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
+    broadcasts: Mapped[List["Broadcast"]] = relationship(
+        "Broadcast",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
+    broadcast_course_links: Mapped[List['BroadcastCourseAssociation']] = relationship(
+        'BroadcastCourseAssociation',
+        back_populates='project'
+    )
+
+
 
 # Модель рассылки
 class Broadcast(Base):
@@ -101,17 +117,29 @@ class Broadcast(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     image_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    sent_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=True)
+
+    # Связь с проектом
+    project: Mapped["Project"] = relationship("Project",
+                                              back_populates="broadcasts",
+                                              lazy="selectin")
 
     # Для SQLite используем JSON-сериализацию вместо ARRAY
-    course_ids: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # JSON-строка с массивом ID курсов
+    course_ids: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Связь с курсами
     courses: Mapped[List['Course']] = relationship(
         'Course',
         secondary='broadcast_course_association',
-        back_populates='broadcasts'
+        back_populates='broadcasts',
+        lazy="selectin"
     )
+    course_associations: Mapped[List['BroadcastCourseAssociation']] = relationship(
+        'BroadcastCourseAssociation',
+        back_populates='broadcast',
+        cascade='all, delete-orphan'
+    )
+
 
     def set_course_ids(self, ids: List[int]):
         """Установить список ID курсов"""
@@ -142,4 +170,25 @@ class BroadcastCourseAssociation(Base):
     __tablename__ = 'broadcast_course_association'
 
     broadcast_id: Mapped[int] = mapped_column(ForeignKey('broadcasts.id'), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'), nullable=False)
     course_id: Mapped[int] = mapped_column(ForeignKey('courses.id'), primary_key=True)
+
+
+    broadcast: Mapped['Broadcast'] = relationship(
+        'Broadcast',
+        back_populates='course_associations',
+        lazy='selectin'
+    )
+    course: Mapped['Course'] = relationship(
+        'Course',
+        back_populates='broadcast_associations',
+        lazy='selectin'
+    )
+    project: Mapped['Project'] = relationship(
+        'Project',
+        back_populates='broadcast_course_links',
+        lazy='selectin'
+    )
+
+    def __repr__(self):
+        return f"<BroadcastCourseAssociation broadcast_id={self.broadcast_id} course_id={self.course_id} project_id={self.project_id}>"

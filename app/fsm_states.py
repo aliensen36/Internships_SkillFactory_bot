@@ -3,7 +3,9 @@ from aiogram.fsm.state import State, StatesGroup
 class BroadcastState(StatesGroup):
     waiting_for_text = State()
     waiting_for_photo = State()
+    waiting_for_project = State()
     waiting_for_courses = State()
+    waiting_for_course_search = State()
     confirmation = State()
 
 

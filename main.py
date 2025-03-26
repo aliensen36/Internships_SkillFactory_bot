@@ -16,6 +16,7 @@ from app.handlers.user_group import user_group_router
 from app.handlers.profile import profile_router
 from app.handlers.admin_project import admin_project_router
 from app.handlers.common import common_router
+from app.handlers.projects import projects_router
 from app.handlers.admin_spec_course import admin_spec_course_router
 from app.handlers.admin_broadcast import admin_broadcast_router
 
@@ -33,6 +34,7 @@ dp.include_router(user_group_router)
 dp.include_router(profile_router)
 dp.include_router(start_router)
 dp.include_router(common_router)
+dp.include_router(projects_router)
 
 dp.include_router(admin_router)
 dp.include_router(admin_project_router)

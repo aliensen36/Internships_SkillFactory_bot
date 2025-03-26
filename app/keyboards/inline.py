@@ -1,9 +1,8 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from mypyc.irbuild import builder
+from sqlalchemy import or_
 
-from app.constants import COURSE_TITLES, courses, change_courses
 from database.models import *
 
 
@@ -151,3 +150,93 @@ async def change_courses_keyboard(session: AsyncSession,
         inline_keyboard.append(navigation_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
+
+
+
+async def projects_keyboard(session: AsyncSession):
+    builder = InlineKeyboardBuilder()
+
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        builder.button(
+            text=project.title,
+            callback_data=f"project_{project.id}"
+        )
+
+    builder.adjust(2)
+    return builder
+
+
+async def bc_courses_keyboard(
+        session: AsyncSession,
+        search_query: str = None,
+        page: int = 0,
+        per_page: int = 8,
+        selected_ids: list[int] = None
+):
+    builder = InlineKeyboardBuilder()
+
+    if selected_ids is None:
+        selected_ids = []
+
+    query = select(Course)
+    if search_query:
+        query = query.where(Course.name.ilike(f"%{search_query}%"))
+
+    # Добавляем сортировку по имени курса
+    query = query.order_by(Course.name.asc())
+
+    query = query.offset(page * per_page).limit(per_page)
+    result = await session.execute(query)
+    courses = result.scalars().all()
+
+    # Сортируем курсы по имени (уже отсортированы в запросе, но для надежности)
+    sorted_courses = sorted(courses, key=lambda c: c.name)
+
+    for course in sorted_courses:
+        # Добавляем галочку для выбранных курсов
+        prefix = "✅ " if course.id in selected_ids else ""
+        builder.button(
+            text=f"{prefix}{course.name}",
+            callback_data=f"bccourse_{course.id}"
+        )
+
+    builder.adjust(2)
+
+    # Навигация
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="◀️ Назад",
+                callback_data=f"bcpage_{page - 1}_{search_query or ''}"
+            )
+        )
+
+    next_page = await session.execute(query.offset((page + 1) * per_page).limit(1))
+    if next_page.scalars().first():
+        nav_buttons.append(
+            InlineKeyboardButton(
+                text="▶️ Вперед",
+                callback_data=f"bcpage_{page + 1}_{search_query or ''}"
+            )
+        )
+
+    if nav_buttons:
+        builder.row(*nav_buttons)
+
+    builder.row(
+        InlineKeyboardButton(
+            text="🔍 Поиск курсов",
+            callback_data="courses_search"
+        ),
+        InlineKeyboardButton(
+            text="✅ Завершить выбор",
+            callback_data="finish_courses_selection"
+        )
+    )
+
+    return builder

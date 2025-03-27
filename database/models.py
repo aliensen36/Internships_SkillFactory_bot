@@ -55,6 +55,7 @@ class Specialization(Base):
     # Связь с курсами
     courses: Mapped[list['Course']] = relationship('Course', back_populates='specialization')
 
+
 # Модель курсов
 class Course(Base):
     __tablename__ = 'courses'
@@ -63,17 +64,17 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     specialization_id: Mapped[int] = mapped_column(Integer, ForeignKey('specializations.id'), nullable=False)
 
-    # Связи
     broadcasts: Mapped[List['Broadcast']] = relationship(
-        'Broadcast',
         secondary='broadcast_course_association',
         back_populates='courses',
-        lazy='selectin'
+        viewonly=True
     )
     broadcast_associations: Mapped[List['BroadcastCourseAssociation']] = relationship(
-        'BroadcastCourseAssociation',
-        back_populates='course'
+        back_populates='course',
+        cascade='all, delete-orphan',
+        passive_deletes=True
     )
+
     users: Mapped[list['User']] = relationship(
         'User',
         back_populates='course',
@@ -85,8 +86,6 @@ class Course(Base):
         lazy='joined'
     )
 
-    def __repr__(self):
-        return f"Course(id={self.id}, name='{self.name}')"
 
 
 class Project(Base):
@@ -97,16 +96,14 @@ class Project(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     broadcasts: Mapped[List["Broadcast"]] = relationship(
-        "Broadcast",
         back_populates="project",
-        cascade="all, delete-orphan",
-        lazy="dynamic"
+        cascade="all, delete-orphan"
     )
     broadcast_course_links: Mapped[List['BroadcastCourseAssociation']] = relationship(
-        'BroadcastCourseAssociation',
-        back_populates='project'
+        back_populates='project',
+        cascade="all, delete-orphan",
+        passive_deletes=True
     )
-
 
 
 # Модель рассылки
@@ -117,33 +114,45 @@ class Broadcast(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     image_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    project_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True
+    )
 
-    # Связь с проектом
-    project: Mapped["Project"] = relationship("Project",
-                                              back_populates="broadcasts",
-                                              lazy="selectin")
+    project: Mapped[Optional["Project"]] = relationship(
+        back_populates="broadcasts"
+    )
 
-    # Для SQLite используем JSON-сериализацию вместо ARRAY
+    course_associations: Mapped[List["BroadcastCourseAssociation"]] = relationship(
+        back_populates="broadcast",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
+
+    courses: Mapped[List["Course"]] = relationship(
+        secondary="broadcast_course_association",
+        back_populates="broadcasts",
+        viewonly=True
+    )
+
     course_ids: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    # Связь с курсами
-    courses: Mapped[List['Course']] = relationship(
-        'Course',
-        secondary='broadcast_course_association',
-        back_populates='broadcasts',
-        lazy="selectin"
-    )
-    course_associations: Mapped[List['BroadcastCourseAssociation']] = relationship(
-        'BroadcastCourseAssociation',
-        back_populates='broadcast',
-        cascade='all, delete-orphan'
-    )
-
-
-    def set_course_ids(self, ids: List[int]):
-        """Установить список ID курсов"""
+    async def set_course_ids(self, ids: List[int], session: AsyncSession):
+        """Установить список ID курсов и создать ассоциации"""
         self.course_ids = json.dumps(ids)
+
+        self.course_associations.clear()
+
+        for course_id in ids:
+            course = await session.get(Course, course_id)
+            if not course:
+                continue
+
+            association = BroadcastCourseAssociation(
+                course_id=course_id,
+                project_id=self.project_id
+            )
+            self.course_associations.append(association)
 
     def get_course_ids(self) -> List[int]:
         """Получить список ID курсов"""
@@ -161,7 +170,7 @@ class Broadcast(Base):
         image_dir = 'media/images/'  # Папка для хранения изображений
         self.image_path = os.path.join(image_dir, image_filename)
 
-    def get_image_url(self):
+    async def get_image_url(self):
         """Метод для получения полного пути к изображению (если необходимо)."""
         return self.image_path
 
@@ -169,26 +178,19 @@ class Broadcast(Base):
 class BroadcastCourseAssociation(Base):
     __tablename__ = 'broadcast_course_association'
 
-    broadcast_id: Mapped[int] = mapped_column(ForeignKey('broadcasts.id'), primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey('projects.id'), nullable=False)
-    course_id: Mapped[int] = mapped_column(ForeignKey('courses.id'), primary_key=True)
-
-
-    broadcast: Mapped['Broadcast'] = relationship(
-        'Broadcast',
-        back_populates='course_associations',
-        lazy='selectin'
+    broadcast_id: Mapped[int] = mapped_column(
+        ForeignKey('broadcasts.id', ondelete="CASCADE"),
+        primary_key=True
     )
-    course: Mapped['Course'] = relationship(
-        'Course',
-        back_populates='broadcast_associations',
-        lazy='selectin'
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey('courses.id', ondelete="CASCADE"),
+        primary_key=True
     )
-    project: Mapped['Project'] = relationship(
-        'Project',
-        back_populates='broadcast_course_links',
-        lazy='selectin'
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey('projects.id', ondelete="CASCADE"),
+        nullable=False
     )
 
-    def __repr__(self):
-        return f"<BroadcastCourseAssociation broadcast_id={self.broadcast_id} course_id={self.course_id} project_id={self.project_id}>"
+    broadcast: Mapped["Broadcast"] = relationship(back_populates="course_associations")
+    course: Mapped["Course"] = relationship(back_populates="broadcast_associations")
+    project: Mapped["Project"] = relationship(back_populates="broadcast_course_links")

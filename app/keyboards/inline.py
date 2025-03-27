@@ -240,3 +240,47 @@ async def bc_courses_keyboard(
     )
 
     return builder
+
+
+# Клавиатура подтверждения
+builder = InlineKeyboardBuilder()
+builder.button(text="✅ Подтвердить", callback_data="confirm_broadcast")
+builder.button(text="✏️ Изменить текст", callback_data="edit_text")
+builder.button(text="🖼️ Изменить фото", callback_data="edit_photo")
+builder.button(text="📌 Изменить проект", callback_data="edit_project")
+builder.button(text="🎯 Изменить курсы", callback_data="edit_courses")
+builder.button(text="❌ Отменить", callback_data="cancel_broadcast")
+builder.adjust(2, 2, 2)
+
+
+# Клавиатура для проектов (рассылка)
+async def projects_keyboard(session: AsyncSession):
+    builder = InlineKeyboardBuilder()
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        builder.button(
+            text=project.title,
+            callback_data=f"project_{project.id}"
+        )
+
+    builder.adjust(2)
+    return builder
+
+
+
+# Клавиатура для проектов (обзор проектов)
+async def view_projects_keyboard(session: AsyncSession):
+    builder = InlineKeyboardBuilder()
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        builder.button(
+            text=project.title,
+            callback_data=f"view_project_{project.id}"
+        )
+
+    builder.adjust(2)
+    return builder

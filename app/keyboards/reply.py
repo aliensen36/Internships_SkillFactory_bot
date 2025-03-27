@@ -15,17 +15,6 @@ kb_main = ReplyKeyboardMarkup(keyboard=[
 )
 
 
-# Клавиатура для проектов
-async def projects_keyboard(session: AsyncSession):
-    builder = ReplyKeyboardBuilder()
-    result = await session.execute(select(Project))
-    projects = result.scalars().all()
-
-    for project in projects:
-        builder.button(text=project.title)
-    builder.adjust(2)
-    return builder
-
 
 # Клавиатура Профиля
 kb_profile = ReplyKeyboardMarkup(keyboard=[

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from aiofiles import open as aio_open
-from aiogram.types import FSInputFile, CallbackQuery
+from aiogram.types import FSInputFile, CallbackQuery, InlineKeyboardMarkup
 from aiogram import F, Router, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -20,12 +20,73 @@ from app.keyboards.inline import projects_keyboard, bc_courses_keyboard
 from app.keyboards.reply import kb_admin_main
 from database.models import User, Specialization, Course, Broadcast, Project, BroadcastCourseAssociation
 import logging
+from typing import Union, Optional
 logger = logging.getLogger(__name__)
 
 
 
 admin_broadcast_router = Router()
 admin_broadcast_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
+
+
+async def send_photo_with_caption(
+    recipient_id: int,
+    photo: Union[str, FSInputFile],
+    text: str,
+    bot: Bot,
+    reply_markup: Optional[InlineKeyboardMarkup] = None
+):
+    """Универсальная функция для отправки фото с подписью"""
+    try:
+        # Если photo - это путь к файлу
+        if isinstance(photo, str) and os.path.exists(photo):
+            photo_file = FSInputFile(photo)
+            if len(text) <= 1024:
+                await bot.send_photo(
+                    chat_id=recipient_id,
+                    photo=photo_file,
+                    caption=text,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup
+                )
+            else:
+                await bot.send_photo(
+                    chat_id=recipient_id,
+                    photo=photo_file,
+                    parse_mode="HTML"
+                )
+                await bot.send_message(
+                    chat_id=recipient_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup
+                )
+        else:
+            # Предполагаем, что это file_id
+            if len(text) <= 1024:
+                await bot.send_photo(
+                    chat_id=recipient_id,
+                    photo=photo,
+                    caption=text,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup
+                )
+            else:
+                await bot.send_photo(
+                    chat_id=recipient_id,
+                    photo=photo,
+                    parse_mode="HTML"
+                )
+                await bot.send_message(
+                    chat_id=recipient_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup
+                )
+    except Exception as e:
+        logger.error(f"Ошибка при отправке фото: {e}", exc_info=True)
+        raise
+
 
 MEDIA_DIR = 'media/images'
 Path(MEDIA_DIR).mkdir(parents=True, exist_ok=True)  # Создаем папку, если ее нет
@@ -369,45 +430,13 @@ async def finish_courses_selection(callback: CallbackQuery,
     # Если есть фото, отправляем его с подписью
     try:
         if photo:
-            # Проверяем, является ли photo путем к файлу
-            if isinstance(photo, str) and os.path.exists(photo):
-                photo_file = FSInputFile(photo)
-                if len(message_text) <= 1024:
-                    await callback.message.answer_photo(
-                        photo=photo_file,
-                        caption=message_text,
-                        parse_mode="HTML",
-                        reply_markup=builder.as_markup()
-                    )
-                else:
-                    await callback.message.answer_photo(
-                        photo=photo_file,
-                        parse_mode="HTML"
-                    )
-                    await callback.message.answer(
-                        text=message_text,
-                        parse_mode="HTML",
-                        reply_markup=builder.as_markup()
-                    )
-            else:
-                # Предполагаем, что это file_id
-                if len(message_text) <= 1024:
-                    await callback.message.answer_photo(
-                        photo=photo,
-                        caption=message_text,
-                        parse_mode="HTML",
-                        reply_markup=builder.as_markup()
-                    )
-                else:
-                    await callback.message.answer_photo(
-                        photo=photo,
-                        parse_mode="HTML"
-                    )
-                    await callback.message.answer(
-                        text=message_text,
-                        parse_mode="HTML",
-                        reply_markup=builder.as_markup()
-                    )
+            await send_photo_with_caption(
+                recipient_id=callback.message.chat.id,
+                photo=photo,
+                text=message_text,
+                bot=bot,
+                reply_markup=builder.as_markup()
+            )
         else:
             await callback.message.answer(
                 text=message_text,
@@ -490,55 +519,20 @@ async def confirm_broadcast(callback: CallbackQuery,
         for tg_id, course_id in users:
             try:
                 if photo:
-                    # Проверяем, является ли photo путем к файлу
-                    if isinstance(photo, str) and os.path.exists(photo):
-                        photo_file = FSInputFile(photo)
-                        if len(text) <= 1024:
-                            await bot.send_photo(
-                                chat_id=tg_id,
-                                photo=photo_file,
-                                caption=text,
-                                parse_mode="HTML"
-                            )
-                        else:
-                            await bot.send_photo(
-                                chat_id=tg_id,
-                                photo=photo_file
-                            )
-                            await bot.send_message(
-                                chat_id=tg_id,
-                                text=text,
-                                parse_mode="HTML"
-                            )
-                    else:
-                        # Предполагаем, что это file_id
-                        if len(text) <= 1024:
-                            await bot.send_photo(
-                                chat_id=tg_id,
-                                photo=photo,
-                                caption=text,
-                                parse_mode="HTML"
-                            )
-                        else:
-                            await bot.send_photo(
-                                chat_id=tg_id,
-                                photo=photo
-                            )
-                            await bot.send_message(
-                                chat_id=tg_id,
-                                text=text,
-                                parse_mode="HTML"
-                            )
+                    await send_photo_with_caption(
+                        recipient_id=tg_id,
+                        photo=photo,
+                        text=text,
+                        bot=bot
+                    )
                 else:
                     await bot.send_message(
                         chat_id=tg_id,
                         text=text,
                         parse_mode="HTML"
                     )
-
                 success_count += 1
                 course_stats[course_id]["success"] += 1
-
             except Exception as e:
                 failed_count += 1
                 logger.error(f"Ошибка отправки для {tg_id}: {str(e)}", exc_info=True)
@@ -605,3 +599,4 @@ async def cancel_broadcast_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Рассылка отменена")
     await state.clear()
     await callback.answer()
+

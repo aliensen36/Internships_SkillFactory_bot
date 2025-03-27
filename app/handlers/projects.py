@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.handlers.admin_broadcast import send_photo_with_caption
 from app.keyboards.inline import projects_keyboard, view_projects_keyboard
 from database.models import User, Broadcast, BroadcastCourseAssociation, Project
 
@@ -37,7 +38,7 @@ async def handle_projects_button(message: Message, session: AsyncSession):
 
 
 @projects_router.callback_query(F.data.startswith("view_project_"))
-async def view_projects(callback: CallbackQuery, session: AsyncSession):
+async def view_projects(callback: CallbackQuery, session: AsyncSession, bot):
     try:
         project_id = int(callback.data.split("_")[2])
 
@@ -80,35 +81,24 @@ async def view_projects(callback: CallbackQuery, session: AsyncSession):
 
         # Отправляем сообщение
         for idx, broadcast in enumerate(broadcasts, 1):
-            # Формируем текст сообщения
             message = f"{idx}. {broadcast.text}"
 
             try:
                 if broadcast.image_path:
-                    # Проверяем существование файла
-                    image_path = Path(broadcast.image_path)
-                    if image_path.exists():
-                        # Отправляем фото с текстом в подписи
-                        await callback.message.answer_photo(
-                            photo=InputFile(image_path),
-                            caption=message,
-                            parse_mode="HTML"
-                        )
-                    else:
-                        # Если файл не найден, отправляем текстовое сообщение с уведомлением
-                        await callback.message.answer(
-                            f"🖼️ [Изображение не найдено по пути: {broadcast.image_path}]\n{message}",
-                            parse_mode="HTML"
-                        )
-                        logger.warning(f"Изображение не найдено: {broadcast.image_path}")
+                    # Используем нашу универсальную функцию
+                    await send_photo_with_caption(
+                        recipient_id=callback.message.chat.id,
+                        photo=broadcast.image_path,
+                        text=message,
+                        bot=bot
+                    )
                 else:
-                    # Если фото нет, просто отправляем текст
                     await callback.message.answer(
-                        message,
+                        text=message,
                         parse_mode="HTML"
                     )
             except Exception as e:
-                logger.error(f"Ошибка при отправке сообщения {idx}: {e}")
+                logger.error(f"Ошибка при отправке сообщения {idx}: {e}", exc_info=True)
                 await callback.message.answer(
                     f"⚠️ Ошибка при отправке сообщения {idx}. Попробуйте позже.",
                     parse_mode="HTML"

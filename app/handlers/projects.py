@@ -226,6 +226,8 @@ async def show_available_broadcasts(callback: CallbackQuery,
         logger.error(f"Error in show_available_broadcasts: {e}", exc_info=True)
         await callback.answer("Произошла ошибка", show_alert=True)
 
+
+
 async def send_broadcast_with_pagination(
     callback: CallbackQuery,
     broadcasts: list[Broadcast],
@@ -234,14 +236,16 @@ async def send_broadcast_with_pagination(
     total: int,
     user_course_id: int
 ):
-    """Улучшенная функция пагинации с использованием send_photo_with_caption"""
+    """Функция пагинации с правильной обработкой фото и текста"""
     try:
         if index < 0 or index >= len(broadcasts):
             await callback.answer("Недопустимый индекс рассылки", show_alert=True)
             return
 
         broadcast = broadcasts[index]
-        text = f"{broadcast.text}\n\n📌 Рассылка {index + 1} из {total}"
+        pagination_text = f"📌 Рассылка {index + 1} из {total}"
+        main_text = broadcast.text
+        full_text = f"{main_text}\n\n{pagination_text}"
 
         # Создаем клавиатуру пагинации
         builder = InlineKeyboardBuilder()
@@ -262,23 +266,44 @@ async def send_broadcast_with_pagination(
         builder.adjust(2, 1)
         markup = builder.as_markup()
 
-        # Отправляем контент с использованием универсальной функции
+        # Удаляем предыдущее сообщение
+        # try:
+        #     await callback.message.delete()
+        # except Exception as e:
+        #     logger.warning(f"Не удалось удалить сообщение: {e}")
+
+        # Отправляем контент
         if broadcast.image_path:
-            success = await send_photo_with_caption(
-                recipient_id=callback.message.chat.id,
-                photo=broadcast.image_path,
-                text=text,
-                bot=callback.bot,
-                reply_markup=markup
-            )
-            if not success:
+            try:
+                # Если текст короткий (<=1024 символа) - отправляем фото с подписью
+                if len(full_text) <= 1024:
+                    await callback.message.bot.send_photo(
+                        chat_id=callback.message.chat.id,
+                        photo=broadcast.image_path,
+                        caption=full_text,
+                        reply_markup=markup
+                    )
+                else:
+                    # Если текст длинный - отправляем фото без подписи и текст отдельно
+                    await callback.message.bot.send_photo(
+                        chat_id=callback.message.chat.id,
+                        photo=broadcast.image_path,
+                        reply_markup=markup
+                    )
+                    await callback.message.bot.send_message(
+                        chat_id=callback.message.chat.id,
+                        text=full_text,
+                        reply_markup=None  # Клавиатура только у первого сообщения
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка при отправке фото: {e}")
                 await callback.message.answer(
-                    text=f"⚠️ Не удалось загрузить изображение\n\n{text}",
+                    text=f"⚠️ Не удалось загрузить изображение\n\n{full_text}",
                     reply_markup=markup
                 )
         else:
             await callback.message.answer(
-                text=text,
+                text=full_text,
                 reply_markup=markup
             )
 
@@ -287,6 +312,8 @@ async def send_broadcast_with_pagination(
         await callback.answer("Ошибка при отображении рассылки", show_alert=True)
     finally:
         await callback.answer()
+
+
 
 @projects_router.callback_query(F.data.startswith("prev_broadcast_"))
 async def prev_broadcast(callback: CallbackQuery, session: AsyncSession):

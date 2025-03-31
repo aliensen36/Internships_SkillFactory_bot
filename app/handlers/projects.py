@@ -1,10 +1,11 @@
 import logging
+import os
 from pathlib import Path
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Filter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InputFile
+from aiogram.types import Message, CallbackQuery, InputFile, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -267,45 +268,59 @@ async def send_broadcast_with_pagination(
         markup = builder.as_markup()
 
         # Удаляем предыдущее сообщение
-        # try:
-        #     await callback.message.delete()
-        # except Exception as e:
-        #     logger.warning(f"Не удалось удалить сообщение: {e}")
+        try:
+            await callback.message.delete()
+        except Exception as e:
+            logger.warning(f"Не удалось удалить сообщение: {e}")
 
         # Отправляем контент
         if broadcast.image_path:
             try:
+                # Определяем тип фото (file_id или путь к файлу)
+                photo = None
+                if os.path.exists(broadcast.image_path):
+                    photo = FSInputFile(broadcast.image_path)
+                else:
+                    # Предполагаем, что это file_id
+                    photo = broadcast.image_path
+
                 # Если текст короткий (<=1024 символа) - отправляем фото с подписью
                 if len(full_text) <= 1024:
                     await callback.message.bot.send_photo(
                         chat_id=callback.message.chat.id,
-                        photo=broadcast.image_path,
+                        photo=photo,
                         caption=full_text,
-                        reply_markup=markup
+                        reply_markup=markup,
+                        parse_mode="HTML"
                     )
                 else:
                     # Если текст длинный - отправляем фото без подписи и текст отдельно
                     await callback.message.bot.send_photo(
                         chat_id=callback.message.chat.id,
-                        photo=broadcast.image_path,
-                        reply_markup=markup
+                        photo=photo,
                     )
                     await callback.message.bot.send_message(
                         chat_id=callback.message.chat.id,
                         text=full_text,
-                        reply_markup=None  # Клавиатура только у первого сообщения
+                        reply_markup=markup,  # Клавиатура только у первого сообщения
+                        parse_mode="HTML"
                     )
             except Exception as e:
-                logger.error(f"Ошибка при отправке фото: {e}")
-                await callback.message.answer(
+                logger.error(f"Ошибка при отправке фото: {e}", exc_info=True)
+                await callback.message.bot.send_message(
+                    chat_id=callback.message.chat.id,
                     text=f"⚠️ Не удалось загрузить изображение\n\n{full_text}",
-                    reply_markup=markup
+                    reply_markup=markup,
+                    parse_mode="HTML"
                 )
         else:
-            await callback.message.answer(
+            await callback.message.bot.send_message(
+                chat_id=callback.message.chat.id,
                 text=full_text,
-                reply_markup=markup
+                reply_markup=markup,
+                parse_mode="HTML"
             )
+
 
     except Exception as e:
         logger.error(f"Error in send_broadcast_with_pagination: {e}", exc_info=True)

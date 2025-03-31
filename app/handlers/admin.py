@@ -1,5 +1,6 @@
 import os
 from aiofiles import open as aio_open
+from aiogram.fsm import state
 from aiogram.types import FSInputFile
 from aiogram import F, Router, Bot
 from aiogram.filters import Command
@@ -11,7 +12,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from sqlalchemy import select, func
 from datetime import datetime, timedelta
 from collections import defaultdict
-from app.keyboards.reply import kb_admin_main
+from app.keyboards.reply import kb_admin_main, kb_main
 from database.models import User, Specialization, Course, Broadcast
 
 admin_router = Router()
@@ -19,8 +20,10 @@ admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
 
 
 @admin_router.message(Command("admin"))
-async def confirmation(message: Message):
-    await message.answer("Что хотите сделать?", reply_markup=kb_admin_main)
+async def confirmation(message: Message, bot: Bot):
+    await message.answer("<b>💻 Администрирование бота 🤖</b>",
+                         parse_mode="HTML",
+                         reply_markup=kb_admin_main)
 
 
 @admin_router.message(F.text == '📊 Статистика')
@@ -39,3 +42,12 @@ async def show_statistics(message: Message, session: AsyncSession):
 
     await message.answer(text, parse_mode="HTML", reply_markup=kb_admin_main)
 
+
+# Обработчик кнопки выхода
+@admin_router.message(F.text == "Выйти из админ-панели")
+async def exit_admin_panel(message: Message):
+    await message.answer(
+        "Выход из админ-панели.",
+        reply_markup=kb_main)
+
+    await state.clear()

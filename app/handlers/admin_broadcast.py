@@ -9,7 +9,6 @@ from aiogram.types import Message
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.testing.suite.test_reflection import users
-
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from sqlalchemy import select, func
@@ -126,7 +125,7 @@ async def get_broadcast_text(message: Message, state: FSMContext):
 )
 async def skip_photo_handler(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     await state.update_data(photo=None)
-    # await callback.message.delete()
+    await callback.answer()
 
     # Переход к выбору проекта
     keyboard = await projects_keyboard(session)

@@ -8,7 +8,7 @@ from database.models import Project
 
 # Главное меню
 kb_main = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="ℹ️ О нас"), KeyboardButton(text="⭐ Проекты")],
+    [KeyboardButton(text="ℹ️ О Factory"), KeyboardButton(text="⭐ Проекты")],
     [KeyboardButton(text="👤 Мой профиль")],
 ],
     resize_keyboard=True
@@ -24,21 +24,49 @@ kb_profile = ReplyKeyboardMarkup(keyboard=[
 )
 
 
+
+# =====================================================================================
+# ------------------------------- Административный раздел -----------------------------
+# =====================================================================================
+
+
+
 # Главная клавиатура админа
 kb_admin_main = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='📁 Проекты'), KeyboardButton(text='📚 Специализации и курсы')],
     [KeyboardButton(text='📢 Рассылка'), KeyboardButton(text='📊 Статистика')],
-    [KeyboardButton(text='⬅️ Назад')],
+    [KeyboardButton(text='Выйти из админ-панели')],
 ],
     resize_keyboard=True
 )
 
 
 # Клавиатура проектов
-kb_admin_projects = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='📥 Добавить проект'), KeyboardButton(text='✏️ Изменить проект')],
-    [KeyboardButton(text='❌ Удалить проект'), KeyboardButton(text='⬅️ Назад')],
-],
+def projects_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="👀 Просмотр"), KeyboardButton(text="➕ Добавить")],
+            [KeyboardButton(text="✏️ Изменить"), KeyboardButton(text="🗑️ Удалить")],
+            [KeyboardButton(text="◀️ Назад")]
+        ],
+        resize_keyboard=True,
+    )
+
+
+# Подтверждение/отмена добавления проекта
+confirm_cancel_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="✅ Подтвердить"), KeyboardButton(text="❌ Отменить")]
+    ],
+    resize_keyboard=True
+)
+
+
+# Клавиатура для подтверждения удаления проекта
+confirm_delete_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="✅ Да, удалить"), KeyboardButton(text="❌ Нет, отменить")]
+    ],
     resize_keyboard=True
 )
 
@@ -51,13 +79,26 @@ kb_specializations_courses = ReplyKeyboardMarkup(keyboard=[
 )
 
 
-kb_specializations = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='👁️ Просмотр'), KeyboardButton(text='➕ Добавить')],
-    [KeyboardButton(text='✏️ Изменить'), KeyboardButton(text='🗑️ Удалить')],
-    [KeyboardButton(text='⬅️ Назад')],
-],
-    resize_keyboard=True,
-)
+# kb_specializations = ReplyKeyboardMarkup(keyboard=[
+#     [KeyboardButton(text='👁️ Просмотр'), KeyboardButton(text='➕ Добавить')],
+#     [KeyboardButton(text='✏️ Изменить'), KeyboardButton(text='🗑️ Удалить')],
+#     [KeyboardButton(text='⬅️ Назад')],
+# ],
+#     resize_keyboard=True,
+# )
+
+
+async def specializations_keyboard():
+    builder = ReplyKeyboardBuilder()
+    builder.button(text='👁️ Просмотр')
+    builder.button(text='➕ Добавить')
+    builder.button(text='✏️ Изменить')
+    builder.button(text='🗑️ Удалить')
+    builder.button(text='⬅️ Назад')
+    builder.adjust(2, 2, 1)
+    return builder.as_markup(
+        resize_keyboard=True,
+    )
 
 
 kb_courses = ReplyKeyboardMarkup(keyboard=[

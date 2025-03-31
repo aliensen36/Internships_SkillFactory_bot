@@ -1,4 +1,5 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Filter
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from mypyc.irbuild import builder
 from sqlalchemy import or_
@@ -6,29 +7,9 @@ from sqlalchemy import or_
 from database.models import *
 
 
-# Проекты
-def get_main_menu_keyboard():
-    keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="💼 Стажировка", callback_data="internship")
-    keyboard.button(text="🏁 Хакатоны", callback_data="hackathons")
-    keyboard.button(text="🚀 Мегахакатоны", callback_data="mega_hackathons")
-    keyboard.button(text="🏆 Конкурсы", callback_data="contests")
-    keyboard.button(text="🎮 Геймджемы", callback_data="gamejams")
-    keyboard.button(text="✨ Спецпроекты", callback_data="special_projects")
-    keyboard.adjust(2)  # 2 кнопки в ряд
-    return keyboard.as_markup()
-
-
-kb_factory = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="💼 Стажировки", callback_data="factory_internship"),
-     InlineKeyboardButton(text="⚡ Хакатоны", callback_data="factory_hackathon")],
-
-    [InlineKeyboardButton(text="🚀 Мегахакатоны", callback_data="factory_megahack"),
-     InlineKeyboardButton(text="🏆 Конкурсы", callback_data="factory_contest")],
-
-    [InlineKeyboardButton(text="🎮 Геймджемы", callback_data="factory_gamejam"),
-     InlineKeyboardButton(text="🎯 Спецпроекты", callback_data="factory_special")]
-])
+# =====================================================================================
+# -------------------------------------- Старт бота -----------------------------------
+# =====================================================================================
 
 
 # Выбор специализации
@@ -61,15 +42,24 @@ async def courses_keyboard(session: AsyncSession, specialization_id: int,
     if not current_courses and page == 0:
         return None
 
-    inline_keyboard = [[InlineKeyboardButton(text=course.name, callback_data=f"course_{course.id}")]
-                       for course in current_courses]
+    inline_keyboard = [
+        [InlineKeyboardButton(
+            text=course.name,
+            callback_data=f"course_{course.id}"
+        )
+        ]
+        for course in current_courses
+    ]
 
     navigation_buttons = []
 
     # Кнопка "Назад"
     if page > 0:
-        navigation_buttons.append(InlineKeyboardButton(text="⬅️ Назад",
-                                                       callback_data=f"page_{specialization_id}_{page - 1}"))
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=f"page_{specialization_id}_{page - 1}")
+        )
 
     # Проверяем, есть ли следующая страница
     next_page_stmt = (
@@ -80,13 +70,119 @@ async def courses_keyboard(session: AsyncSession, specialization_id: int,
     )
     next_page_result = await session.execute(next_page_stmt)
     if next_page_result.scalars().first():
-        navigation_buttons.append(InlineKeyboardButton(text="➡️ Вперед",
-                                                       callback_data=f"page_{specialization_id}_{page + 1}"))
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="➡️ Вперед",
+                callback_data=f"page_{specialization_id}_{page + 1}")
+        )
 
     if navigation_buttons:
         inline_keyboard.append(navigation_buttons)
 
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
+
+
+# =====================================================================================
+# ------------------------------ Проекты (клиентская часть) ---------------------------
+# =====================================================================================
+
+
+# Проекты - обзор проектов (первый уровень)
+async def view_projects_keyboard(session: AsyncSession):
+    builder = InlineKeyboardBuilder()
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        builder.button(
+            text=project.title,
+            callback_data=f"view_project_{project.id}"
+        )
+
+    builder.adjust(2)
+    return builder
+
+# Просмотр конкретного проекта (второй уровень)
+class ProjectCallbackFilter(Filter):
+    def __init__(self, prefix: str):
+        self.prefix = prefix
+
+    async def __call__(self, callback: CallbackQuery) -> bool:
+        return callback.data.startswith(self.prefix)
+
+async def view_project_kb(session: AsyncSession):
+    builder = InlineKeyboardBuilder()
+    result = await session.execute(select(Project))
+    projects = result.scalars().all()
+
+    for project in projects:
+        builder.button(
+            text=project.title,
+            callback_data=f"view_project_{project.id}"
+        )
+
+    builder.button(text="◀️ Назад", callback_data="back_to_main_menu")
+    builder.adjust(2)
+    return builder.as_markup()
+
+# Кнопка для каждого проекта
+async def get_project_details_keyboard(project_id: int, session: AsyncSession):
+    builder = InlineKeyboardBuilder()
+
+    # Получаем проект из базы данных
+    project = await session.get(Project, project_id)
+    if not project:
+        raise ValueError("Project not found")
+
+    # Первая кнопка - индивидуальное название проекта
+    builder.button(
+        text=f"{project.title} – это...",
+        callback_data=f"about_project_{project.id}"
+    )
+
+    # Вторая кнопка - бенефиты
+    builder.button(
+        text="Бенефиты от участия",
+        callback_data=f"benefits_project_{project.id}"
+    )
+
+    # Третья кнопка - примеры
+    builder.button(
+        text="Примеры",
+        callback_data=f"examples_project_{project.id}"
+    )
+
+    # Четвертая кнопка - все мероприятия
+    builder.button(
+        text="Перейти ко всем мероприятиям",
+        url="https://view.genially.com/66b2271a6ff343f7e18bb52f"
+    )
+
+    # Пятая кнопка - доступные по курсу
+    builder.button(
+        text="Доступные по моему курсу",
+        callback_data=f"available_to_me_project_{project.id}"
+    )
+
+    # Шестая кнопка - назад
+    builder.button(
+        text="Назад",
+        callback_data="back_to_projects_list"
+    )
+
+    # Распределяем кнопки по 2 в ряду
+    builder.adjust(2, 2, 2)
+    return builder.as_markup()
+
+async def project_details_message(project: Project) -> str:
+    return (f"<b>{project.title}</b>\n\n")
+
+
+
+# =====================================================================================
+# ------------------------------ Профиль (клиентская часть) ---------------------------
+# =====================================================================================
 
 
 # Изменение специализации
@@ -104,7 +200,7 @@ async def change_specialization_keyboard(session: AsyncSession):
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
-# Изменение курсов с пагинацией
+# Изменение курса с пагинацией
 async def change_courses_keyboard(session: AsyncSession,
                                   specialization_id: int,
                                   page: int = 0):
@@ -153,10 +249,15 @@ async def change_courses_keyboard(session: AsyncSession,
 
 
 
+# ======================================================================================
+# -------------------------------------- Рассылка -------------------------------------
+# ======================================================================================
 
-async def projects_keyboard(session: AsyncSession):
+
+
+# Проекты
+async def bc_projects_keyboard(session: AsyncSession):
     builder = InlineKeyboardBuilder()
-
     result = await session.execute(select(Project))
     projects = result.scalars().all()
 
@@ -170,6 +271,7 @@ async def projects_keyboard(session: AsyncSession):
     return builder
 
 
+# Курсы
 async def bc_courses_keyboard(
         session: AsyncSession,
         search_query: str = None,
@@ -251,11 +353,17 @@ builder.button(text="📌 Изменить проект", callback_data="edit_pr
 builder.button(text="🎯 Изменить курсы", callback_data="edit_courses")
 builder.button(text="❌ Отменить", callback_data="cancel_broadcast")
 builder.adjust(2, 2, 2)
+# ======================================================================================
 
 
-# Клавиатура для проектов (рассылка)
+
+# ------------------------------- Админ-панель ------------------------------------
+# ======================================================================================
+
+# Проекты
 async def projects_keyboard(session: AsyncSession):
     builder = InlineKeyboardBuilder()
+
     result = await session.execute(select(Project))
     projects = result.scalars().all()
 
@@ -270,17 +378,4 @@ async def projects_keyboard(session: AsyncSession):
 
 
 
-# Клавиатура для проектов (обзор проектов)
-async def view_projects_keyboard(session: AsyncSession):
-    builder = InlineKeyboardBuilder()
-    result = await session.execute(select(Project))
-    projects = result.scalars().all()
 
-    for project in projects:
-        builder.button(
-            text=project.title,
-            callback_data=f"view_project_{project.id}"
-        )
-
-    builder.adjust(2)
-    return builder

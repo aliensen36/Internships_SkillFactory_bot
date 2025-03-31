@@ -1,13 +1,13 @@
 from aiogram import Router, F
+from aiogram.filters import StateFilter, Filter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import *
-from app.keyboards.reply import kb_specializations_courses, kb_specializations, kb_courses
+from app.keyboards.reply import kb_specializations_courses, kb_courses, specializations_keyboard
 from database.models import *
 
 admin_spec_course_router = Router()
@@ -23,14 +23,16 @@ async def specializations_and_courses(message: Message):
 
 # Обработчик кнопки '🎯 Специализации'
 @admin_spec_course_router.message(F.text == '🎯 Специализации')
-async def specializations(message: Message):
+async def specializations(message: Message, state: FSMContext):
+    await state.set_state(SpecializationState.waiting_for_action)
     await message.answer("Выберите раздел:",
-                         reply_markup=kb_specializations)
+                         reply_markup=await specializations_keyboard())
 
 
 # Обработчик кнопки '👁️ Просмотр'
 @admin_spec_course_router.message(F.text == '👁️ Просмотр')
-async def view_specializations(message: Message, session: AsyncSession):
+async def view_specializations(message: Message,
+                               session: AsyncSession):
     result = await session.execute(select(Specialization))
     specializations = result.scalars().all()
 
@@ -47,12 +49,17 @@ async def view_specializations(message: Message, session: AsyncSession):
 
 
 # Обработчик кнопки '➕ Добавить'
-@admin_spec_course_router.message(F.text == '➕ Добавить')
-async def add_specialization_start(message: Message, state: FSMContext):
-    await state.set_state(SpecializationState.waiting_for_specialization_name)
+@admin_spec_course_router.message(SpecializationState.waiting_for_action,
+                                  F.text == '➕ Добавить')
+async def add_specialization_start(message: Message,
+                                   state: FSMContext):
+    await state.set_state(SpecializationState.waiting_for_name)
     await message.answer("Введите название новой специализации:")
-@admin_spec_course_router.message(SpecializationState.waiting_for_specialization_name)
-async def add_specialization_save(message: Message, state: FSMContext, session: AsyncSession):
+
+@admin_spec_course_router.message(SpecializationState.waiting_for_name)
+async def add_specialization_save(message: Message,
+                                  state: FSMContext,
+                                  session: AsyncSession):
     name = message.text.strip()
 
     # Проверка на дубликат
@@ -69,22 +76,27 @@ async def add_specialization_save(message: Message, state: FSMContext, session: 
 
     await message.answer(f"✅ Специализация <b>{name}</b> успешно добавлена!",
                          parse_mode="HTML",
-                         reply_markup=kb_specializations)
+                         reply_markup=await specializations_keyboard())
     await state.clear()
 
 
 
 # Обработчик кнопки '📚 Курсы'
 @admin_spec_course_router.message(F.text == '📚 Курсы')
-async def courses(message: Message):
+async def courses(message: Message, state: FSMContext):
+    await state.set_state(CourseState.waiting_for_action)
     await message.answer("Выберите раздел:",
                          reply_markup=kb_courses)
 
 
 # Обработчик кнопки 'Просмотр 👁️'
 @admin_spec_course_router.message(F.text == 'Просмотр 👁️')
-async def view_courses(message: Message, session: AsyncSession):
-    result = await session.execute(select(Specialization).options(selectinload(Specialization.courses)))
+async def view_courses(message: Message,
+                       session: AsyncSession):
+    result = await (session
+                    .execute(select(Specialization)
+                    .options(selectinload(Specialization.courses)))
+                    )
     specializations = result.scalars().all()
 
     if not specializations:
@@ -107,7 +119,9 @@ async def view_courses(message: Message, session: AsyncSession):
 
 # Обработчик кнопки 'Добавить ➕'
 @admin_spec_course_router.message(F.text == 'Добавить ➕')
-async def add_course_start(message: Message, state: FSMContext, session: AsyncSession):
+async def add_course_start(message: Message,
+                           state: FSMContext,
+                           session: AsyncSession):
     result = await session.execute(select(Specialization))
     specializations = result.scalars().all()
 
@@ -116,8 +130,12 @@ async def add_course_start(message: Message, state: FSMContext, session: AsyncSe
         return
 
     # Формируем инлайн-кнопки
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=spec.name, callback_data=f"select_spec_{spec.id}")]
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+        [InlineKeyboardButton(
+            text=spec.name,
+            callback_data=f"select_spec_{spec.id}")
+        ]
         for spec in specializations
     ])
     await state.set_state(CourseState.waiting_for_specialization)
@@ -134,13 +152,15 @@ async def process_spec_choice(callback: CallbackQuery, state: FSMContext):
     spec_id = int(callback.data.replace("select_spec_", ""))
     await state.update_data(specialization_id=spec_id)
 
-    await state.set_state(CourseState.waiting_for_course_name)
+    await state.set_state(CourseState.waiting_for_course)
     await callback.message.edit_text("Теперь введите название нового курса:")
     await callback.answer()
 
 # ✅ Шаг 3: Сохраняем курс
 @admin_spec_course_router.message(CourseState.waiting_for_course)
-async def add_course_save(message: Message, state: FSMContext, session: AsyncSession):
+async def add_course_save(message: Message,
+                          state: FSMContext,
+                          session: AsyncSession):
     name = message.text.strip()
     data = await state.get_data()
     specialization_id = int(data.get("specialization_id"))

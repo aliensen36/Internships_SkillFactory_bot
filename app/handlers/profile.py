@@ -14,8 +14,10 @@ from aiogram.exceptions import TelegramBadRequest
 
 profile_router = Router()
 
+
 @profile_router.message(F.text == "👤 Мой профиль")
-async def profile_handler(message: Message, session: AsyncSession):
+async def profile_handler(message: Message,
+                          session: AsyncSession):
     stmt = select(User).where(User.tg_id == message.from_user.id).options(
         selectinload(User.specialization),
         selectinload(User.course)
@@ -37,7 +39,6 @@ async def profile_handler(message: Message, session: AsyncSession):
         await message.answer("Профиль не найден. Попробуй снова /start.")
 
 
-
 @profile_router.message(F.text == "🔁 Изменить курс")
 async def change_specialization_start(message: Message, state: FSMContext,
                                 session: AsyncSession):
@@ -48,7 +49,8 @@ async def change_specialization_start(message: Message, state: FSMContext,
 
 @profile_router.callback_query(ChangeCourseState.waiting_for_specialization,
                                F.data.startswith("change_spec_"))
-async def change_specialization(callback: CallbackQuery, state: FSMContext,
+async def change_specialization(callback: CallbackQuery,
+                                state: FSMContext,
                                 session: AsyncSession):
     spec_id = callback.data.replace("change_spec_", "").strip()
     if not spec_id.isdigit():
@@ -82,7 +84,6 @@ async def change_specialization(callback: CallbackQuery, state: FSMContext,
                     reply_markup=await specialization_keyboard(session)  # Подставляем клавиатуру выбора специализации
                 )
             else:
-                await state.set_state(ChangeCourseState.waiting_for_course)
                 await callback.message.answer(
                     "🎓 Теперь выбери курс, который тебя интересует:",
                     reply_markup=keyboard
@@ -91,6 +92,8 @@ async def change_specialization(callback: CallbackQuery, state: FSMContext,
             await callback.answer("❌ Специализация не найдена.", show_alert=True)
     else:
         await callback.answer("❌ Пользователь не найден.", show_alert=True)
+
+    await state.set_state(ChangeCourseState.waiting_for_course)
 
 
 @profile_router.callback_query(ChangeCourseState.waiting_for_course,

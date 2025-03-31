@@ -34,13 +34,6 @@ class User(Base):
     # Связь с курсом
     course: Mapped['Course'] = relationship('Course', back_populates='users')
 
-    @hybrid_property
-    def specialization_name(self):
-        return self.specialization.name if self.specialization else None
-
-    @hybrid_property
-    def course_name(self):
-        return self.course.name if self.course else None
 
 
 # Модель специализаций
@@ -93,7 +86,9 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    benefit: Mapped[str] = mapped_column(Text, nullable=True)
+    example: Mapped[str] = mapped_column(Text, nullable=True)
 
     broadcasts: Mapped[List["Broadcast"]] = relationship(
         back_populates="project",
@@ -135,7 +130,7 @@ class Broadcast(Base):
         viewonly=True
     )
 
-    course_ids: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # course_ids: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     async def set_course_ids(self, ids: List[int], session: AsyncSession):
         """Установить список ID курсов и создать ассоциации"""
@@ -154,14 +149,14 @@ class Broadcast(Base):
             )
             self.course_associations.append(association)
 
-    def get_course_ids(self) -> List[int]:
-        """Получить список ID курсов"""
-        return json.loads(self.course_ids) if self.course_ids else []
+    async def get_course_ids(self, session):
+        await session.refresh(self, ['course_associations'])
+        return [ca.course_id for ca in self.course_associations]
 
     async def get_recipients(self, session: AsyncSession) -> List[User]:
-        """Получить список пользователей для рассылки"""
+        course_ids = await self.get_course_ids(session)
         result = await session.execute(
-            select(User).where(User.course_id.in_(self.get_course_ids())))
+            select(User).where(User.course_id.in_(course_ids)))
         return result.scalars().all()
 
     async def set_image_path(self, image_filename: str):

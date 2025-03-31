@@ -10,15 +10,32 @@ class BroadcastState(StatesGroup):
 
 
 class ProjectAddState(StatesGroup):
-    title = State()
-    content = State()
+    waiting_for_action = State()
+    waiting_for_title = State()
+    waiting_for_description = State()
+    waiting_for_benefit = State()
+    waiting_for_confirmation = State()
+
+
+
+class ProjectEditState(StatesGroup):
+    waiting_for_title = State()
+    waiting_for_description = State()
+    waiting_for_benefit = State()
+
+
+class ProjectDeleteState(StatesGroup):
+    waiting_for_delete = State()
+    waiting_for_confirmation = State()
 
 
 class SpecializationState(StatesGroup):
-    waiting_for_specialization_name = State()
+    waiting_for_action = State()
+    waiting_for_name = State()
 
 
 class CourseState(StatesGroup):
+    waiting_for_action = State()
     waiting_for_specialization = State()
     waiting_for_course = State()
 
@@ -26,10 +43,3 @@ class ChangeCourseState(StatesGroup):
     waiting_for_specialization = State()
     waiting_for_course = State()
 
-# Состояния для меню
-class MenuState(StatesGroup):
-    main_menu = State()
-    level_1_menu = State()
-    level_2_menu = State()
-    level_3_menu = State()
-    level_4_menu = State()

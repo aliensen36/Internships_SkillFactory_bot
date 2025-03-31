@@ -34,16 +34,16 @@ async def start_handler(message: Message, session: AsyncSession):
 
         await message.answer(welcome_msg, parse_mode="HTML")
         await asyncio.sleep(1)
-        await message.answer(about_bot_msg, reply_markup=kb_factory, parse_mode="HTML")
-        await asyncio.sleep(1)
 
+        await message.answer(about_bot_msg, parse_mode="HTML")
+        await asyncio.sleep(1)
 
         await message.answer(choose_msg,
                              reply_markup=await specialization_keyboard(session),
                              parse_mode="HTML")
     else:
         # Приветствие зарегистрированного пользователя
-        await message.answer("Добро пожаловать! 🎉\n\nС возвращением!",
+        await message.answer("🎉 С возвращением! 🎉",
                              reply_markup=kb_main)
 
 
@@ -158,25 +158,22 @@ async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
         pass  # Игнорируем, если клавиатура не изменилась
 
 
-
-
-
-@start_router.callback_query(F.data.startswith("factory_"))
-async def explain_factory_format(callback: CallbackQuery):
-    explanations = {
-        "factory_internship": "💼 Стажировки — практика на реальных задачах от "
-                              "компаний и НКО.",
-        "factory_hackathon": "⚡ Хакатоны — командные соревнования с интересными "
-                             "задачами и сжатыми сроками.",
-        "factory_megahack": "🚀 Мегахакатоны — масштабные события с топовыми "
-                            "кейсами.",
-        "factory_contest": "🏆 Конкурсы — возможность проявить себя и выиграть "
-                           "призы.",
-        "factory_gamejam": "🎮 Геймджемы — создание игр за короткое время, креатив "
-                           "и фановый опыт!",
-        "factory_special": "🎯 Спецпроекты — необычные задания и коллаборации "
-                           "с бизнесом и НКО."
-    }
-
-    text = explanations.get(callback.data, "❓ Неизвестный формат.")
-    await callback.answer(text, show_alert=True)
+# @start_router.callback_query(F.data.startswith("factory_"))
+# async def explain_factory_format(callback: CallbackQuery):
+#     explanations = {
+#         "factory_internship": "💼 Стажировки — практика на реальных задачах от "
+#                               "компаний и НКО.",
+#         "factory_hackathon": "⚡ Хакатоны — командные соревнования с интересными "
+#                              "задачами и сжатыми сроками.",
+#         "factory_megahack": "🚀 Мегахакатоны — масштабные события с топовыми "
+#                             "кейсами.",
+#         "factory_contest": "🏆 Конкурсы — возможность проявить себя и выиграть "
+#                            "призы.",
+#         "factory_gamejam": "🎮 Геймджемы — создание игр за короткое время, креатив "
+#                            "и фановый опыт!",
+#         "factory_special": "🎯 Спецпроекты — необычные задания и коллаборации "
+#                            "с бизнесом и НКО."
+#     }
+#
+#     text = explanations.get(callback.data, "❓ Неизвестный формат.")
+#     await callback.answer(text, show_alert=True)

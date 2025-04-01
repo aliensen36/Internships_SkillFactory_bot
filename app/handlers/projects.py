@@ -174,7 +174,8 @@ async def examples_project(callback: CallbackQuery,
 
 @projects_router.callback_query(ProjectCallbackFilter(prefix="available_to_me_project_"))
 async def show_available_broadcasts(callback: CallbackQuery,
-                                    session: AsyncSession):
+                                   session: AsyncSession,
+                                   state: FSMContext):  # Добавляем state
     try:
         # Получаем пользователя с его курсом
         stmt = select(User).where(User.tg_id == callback.from_user.id).options(
@@ -214,12 +215,23 @@ async def show_available_broadcasts(callback: CallbackQuery,
             await callback.answer("Нет доступных рассылок для вашего курса", show_alert=True)
             return
 
-        await send_broadcast_with_pagination(
+        # Отправляем первую рассылку и сохраняем сообщения
+        new_messages = await send_broadcast_with_pagination(
             callback=callback,
             broadcasts=broadcasts_list,
             index=0,
             project_id=project_id,
             total=len(broadcasts_list),
+            user_course_id=user.course_id,
+            last_messages=[]  # Пустой список для первого сообщения
+        )
+
+        # Сохраняем состояние
+        await state.update_data(
+            last_messages=new_messages,
+            current_index=0,
+            broadcasts_list=broadcasts_list,
+            project_id=project_id,
             user_course_id=user.course_id
         )
 
@@ -228,20 +240,31 @@ async def show_available_broadcasts(callback: CallbackQuery,
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
-
 async def send_broadcast_with_pagination(
-    callback: CallbackQuery,
-    broadcasts: list[Broadcast],
-    index: int,
-    project_id: int,
-    total: int,
-    user_course_id: int
+        callback: CallbackQuery,
+        broadcasts: list[Broadcast],
+        index: int,
+        project_id: int,
+        total: int,
+        user_course_id: int,
+        last_messages: list[int] = None  # Для хранения ID всех сообщений (фото+текст)
 ):
     """Функция пагинации с правильной обработкой фото и текста"""
     try:
         if index < 0 or index >= len(broadcasts):
             await callback.answer("Недопустимый индекс рассылки", show_alert=True)
             return
+
+        # Удаляем ВСЕ предыдущие сообщения (и фото, и текст)
+        if last_messages:
+            for msg_id in last_messages:
+                try:
+                    await callback.message.bot.delete_message(
+                        chat_id=callback.message.chat.id,
+                        message_id=msg_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить сообщение {msg_id}: {e}")
 
         broadcast = broadcasts[index]
         pagination_text = f"📌 Рассылка {index + 1} из {total}"
@@ -267,108 +290,103 @@ async def send_broadcast_with_pagination(
         builder.adjust(2, 1)
         markup = builder.as_markup()
 
-        # Удаляем предыдущее сообщение
-        try:
-            await callback.message.delete()
-        except Exception as e:
-            logger.warning(f"Не удалось удалить сообщение: {e}")
+        # Список для хранения ID ВСЕХ отправленных сообщений
+        current_messages = []
 
         # Отправляем контент
         if broadcast.image_path:
             try:
-                # Определяем тип фото (file_id или путь к файлу)
-                photo = None
-                if os.path.exists(broadcast.image_path):
-                    photo = FSInputFile(broadcast.image_path)
-                else:
-                    # Предполагаем, что это file_id
-                    photo = broadcast.image_path
+                # Определяем тип фото
+                photo = FSInputFile(broadcast.image_path) if os.path.exists(
+                    broadcast.image_path) else broadcast.image_path
 
-                # Если текст короткий (<=1024 символа) - отправляем фото с подписью
                 if len(full_text) <= 1024:
-                    await callback.message.bot.send_photo(
+                    # Короткий текст - отправляем одним сообщением
+                    msg = await callback.message.bot.send_photo(
                         chat_id=callback.message.chat.id,
                         photo=photo,
                         caption=full_text,
                         reply_markup=markup,
                         parse_mode="HTML"
                     )
+                    current_messages.append(msg.message_id)
                 else:
-                    # Если текст длинный - отправляем фото без подписи и текст отдельно
-                    await callback.message.bot.send_photo(
+                    # Длинный текст - отправляем фото и текст отдельно
+                    photo_msg = await callback.message.bot.send_photo(
                         chat_id=callback.message.chat.id,
-                        photo=photo,
+                        photo=photo
                     )
-                    await callback.message.bot.send_message(
+                    current_messages.append(photo_msg.message_id)
+
+                    text_msg = await callback.message.bot.send_message(
                         chat_id=callback.message.chat.id,
                         text=full_text,
-                        reply_markup=markup,  # Клавиатура только у первого сообщения
+                        reply_markup=markup,
                         parse_mode="HTML"
                     )
+                    current_messages.append(text_msg.message_id)
             except Exception as e:
                 logger.error(f"Ошибка при отправке фото: {e}", exc_info=True)
-                await callback.message.bot.send_message(
+                error_msg = await callback.message.bot.send_message(
                     chat_id=callback.message.chat.id,
                     text=f"⚠️ Не удалось загрузить изображение\n\n{full_text}",
                     reply_markup=markup,
                     parse_mode="HTML"
                 )
+                current_messages.append(error_msg.message_id)
         else:
-            await callback.message.bot.send_message(
+            msg = await callback.message.bot.send_message(
                 chat_id=callback.message.chat.id,
                 text=full_text,
                 reply_markup=markup,
                 parse_mode="HTML"
             )
+            current_messages.append(msg.message_id)
 
+        return current_messages  # Возвращаем IDs ВСЕХ отправленных сообщений
 
     except Exception as e:
         logger.error(f"Error in send_broadcast_with_pagination: {e}", exc_info=True)
         await callback.answer("Ошибка при отображении рассылки", show_alert=True)
+        return []
     finally:
         await callback.answer()
 
 
 
-@projects_router.callback_query(F.data.startswith("prev_broadcast_"))
-async def prev_broadcast(callback: CallbackQuery, session: AsyncSession):
-    try:
-        parts = callback.data.split('_')
-        project_id = int(parts[2])
-        index = int(parts[3])
-        course_id = int(parts[4])
 
-        # Получаем рассылки для проекта и курса
-        stmt = (
-            select(Broadcast)
-            .join(Broadcast.course_associations)
-            .where(
-                Broadcast.project_id == project_id,
-                Broadcast.is_sent == True,
-                BroadcastCourseAssociation.course_id == course_id
-            )
-            .order_by(Broadcast.id.desc())
-        )
-        broadcasts_list = (await session.scalars(stmt)).all()
+@projects_router.callback_query(F.data.startswith("prev_broadcast_"))
+async def prev_broadcast(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    try:
+        # Получаем данные из состояния
+        data = await state.get_data()
+        last_messages = data.get("last_messages", [])
+        current_index = data.get("current_index", 0)
+        broadcasts_list = data.get("broadcasts_list", [])
+        project_id = data.get("project_id")
+        user_course_id = data.get("user_course_id")
 
         if not broadcasts_list:
             await callback.answer("Нет доступных рассылок", show_alert=True)
             return
 
-        # Удаляем предыдущее сообщение
-        try:
-            await callback.message.delete()
-        except Exception as e:
-            logger.warning(f"Не удалось удалить сообщение: {e}")
+        new_index = max(0, current_index - 1)
 
         # Отправляем предыдущую рассылку
-        await send_broadcast_with_pagination(
+        new_messages = await send_broadcast_with_pagination(
             callback=callback,
             broadcasts=broadcasts_list,
-            index=max(0, index - 1),
+            index=new_index,
             project_id=project_id,
             total=len(broadcasts_list),
-            user_course_id=course_id
+            user_course_id=user_course_id,
+            last_messages=last_messages
+        )
+
+        # Сохраняем новые данные
+        await state.update_data(
+            last_messages=new_messages,
+            current_index=new_index
         )
 
     except Exception as e:
@@ -376,44 +394,37 @@ async def prev_broadcast(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Ошибка при загрузке", show_alert=True)
 
 @projects_router.callback_query(F.data.startswith("next_broadcast_"))
-async def next_broadcast(callback: CallbackQuery, session: AsyncSession):
+async def next_broadcast(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     try:
-        parts = callback.data.split('_')
-        project_id = int(parts[2])
-        index = int(parts[3])
-        course_id = int(parts[4])
-
-        # Получаем рассылки для проекта и курса
-        stmt = (
-            select(Broadcast)
-            .join(Broadcast.course_associations)
-            .where(
-                Broadcast.project_id == project_id,
-                Broadcast.is_sent == True,
-                BroadcastCourseAssociation.course_id == course_id
-            )
-            .order_by(Broadcast.id.desc())
-        )
-        broadcasts_list = (await session.scalars(stmt)).all()
+        # Получаем данные из состояния
+        data = await state.get_data()
+        last_messages = data.get("last_messages", [])
+        current_index = data.get("current_index", 0)
+        broadcasts_list = data.get("broadcasts_list", [])
+        project_id = data.get("project_id")
+        user_course_id = data.get("user_course_id")
 
         if not broadcasts_list:
             await callback.answer("Нет доступных рассылок", show_alert=True)
             return
 
-        # Удаляем предыдущее сообщение
-        try:
-            await callback.message.delete()
-        except Exception as e:
-            logger.warning(f"Не удалось удалить сообщение: {e}")
+        new_index = min(len(broadcasts_list) - 1, current_index + 1)
 
         # Отправляем следующую рассылку
-        await send_broadcast_with_pagination(
+        new_messages = await send_broadcast_with_pagination(
             callback=callback,
             broadcasts=broadcasts_list,
-            index=min(len(broadcasts_list) - 1, index + 1),
+            index=new_index,
             project_id=project_id,
             total=len(broadcasts_list),
-            user_course_id=course_id
+            user_course_id=user_course_id,
+            last_messages=last_messages
+        )
+
+        # Сохраняем новые данные
+        await state.update_data(
+            last_messages=new_messages,
+            current_index=new_index
         )
 
     except Exception as e:

@@ -281,7 +281,7 @@ async def send_broadcast_with_pagination(
                     logger.warning(f"Не удалось удалить сообщение {msg_id}: {e}")
 
         broadcast = broadcasts[index]
-        pagination_text = f"📌 Рассылка {index + 1} из {total}"
+        pagination_text = f"<b>Рассылка {index + 1} из {total}</b>"
         main_text = broadcast.text
         full_text = f"{main_text}\n\n{pagination_text}"
 
@@ -336,6 +336,7 @@ async def send_broadcast_with_pagination(
                         chat_id=callback.message.chat.id,
                         text=full_text,
                         reply_markup=markup,
+                        disable_web_page_preview=True,
                         parse_mode="HTML"
                     )
                     current_messages.append(text_msg.message_id)
@@ -345,6 +346,7 @@ async def send_broadcast_with_pagination(
                     chat_id=callback.message.chat.id,
                     text=f"⚠️ Не удалось загрузить изображение\n\n{full_text}",
                     reply_markup=markup,
+                    disable_web_page_preview=True,
                     parse_mode="HTML"
                 )
                 current_messages.append(error_msg.message_id)
@@ -353,6 +355,7 @@ async def send_broadcast_with_pagination(
                 chat_id=callback.message.chat.id,
                 text=full_text,
                 reply_markup=markup,
+                disable_web_page_preview=True,
                 parse_mode="HTML"
             )
             current_messages.append(msg.message_id)

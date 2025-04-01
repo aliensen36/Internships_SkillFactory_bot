@@ -58,6 +58,7 @@ async def send_photo_with_caption(
                     chat_id=recipient_id,
                     text=text,
                     parse_mode="HTML",
+                    disable_web_page_preview=True,
                     reply_markup=reply_markup
                 )
         else:
@@ -80,6 +81,7 @@ async def send_photo_with_caption(
                     chat_id=recipient_id,
                     text=text,
                     parse_mode="HTML",
+                    disable_web_page_preview=True,
                     reply_markup=reply_markup
                 )
     except Exception as e:
@@ -528,6 +530,7 @@ async def confirm_broadcast(callback: CallbackQuery,
                     await bot.send_message(
                         chat_id=tg_id,
                         text=text,
+                        disable_web_page_preview=True,
                         parse_mode="HTML"
                     )
                 success_count += 1

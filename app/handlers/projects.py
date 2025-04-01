@@ -64,11 +64,25 @@ async def view_project(callback: CallbackQuery, session: AsyncSession):
 
     message_text = await project_details_message(project)
 
-    await callback.message.edit_text(
-        message_text,
-        reply_markup=await get_project_details_keyboard(project_id, session),
-        parse_mode="HTML"
-    )
+    try:
+        # Пытаемся отредактировать сообщение как текст
+        await callback.message.edit_text(
+            message_text,
+            reply_markup=await get_project_details_keyboard(project_id, session),
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest as e:
+        if "there is no text in the message to edit" in str(e):
+            # Если предыдущее сообщение было фото с подписью, удаляем его и отправляем новое
+            await callback.message.delete()
+            await callback.message.answer(
+                message_text,
+                reply_markup=await get_project_details_keyboard(project_id, session),
+                parse_mode="HTML"
+            )
+        else:
+            raise
+
     await callback.answer()
 
 

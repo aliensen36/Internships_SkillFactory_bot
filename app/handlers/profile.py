@@ -1,10 +1,10 @@
 from aiogram import Router, F
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from app.constants import COURSE_TITLES
 from app.fsm_states import ChangeCourseState
 from app.keyboards.inline import *
 from app.keyboards.reply import kb_profile, kb_main
@@ -60,6 +60,13 @@ async def change_specialization_start(message: Message,
     await message.answer("🎯 Выбери специализацию:",
                          reply_markup=await change_specialization_keyboard(session))
     await state.set_state(ChangeCourseState.waiting_for_specialization)
+
+
+# Новый обработчик для команды /course
+@profile_router.message(Command("course"))
+async def course_command(message: Message, state: FSMContext, session: AsyncSession):
+    # Просто вызываем существующий обработчик
+    await change_specialization_start(message, state, session)
 
 
 @profile_router.callback_query(ChangeCourseState.waiting_for_specialization,
@@ -135,6 +142,11 @@ async def change_course(callback: CallbackQuery, state: FSMContext,
             f"✅ Выбран курс:\n\n<b>{course.name}</b>",
             parse_mode="HTML"
         )
+        await callback.message.answer(
+            "Главное меню",
+            reply_markup=kb_main
+        )
+
     else:
         await callback.answer("❌ Пользователь не найден.", show_alert=True)
     await state.clear()

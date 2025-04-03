@@ -45,9 +45,9 @@ async def show_statistics(message: Message, session: AsyncSession):
 
 # Обработчик кнопки выхода
 @admin_router.message(F.text == "Выйти из админ-панели")
-async def exit_admin_panel(message: Message):
+async def exit_admin_panel(message: Message,
+                           state: FSMContext):
     await message.answer(
         "Выход из админ-панели.",
         reply_markup=kb_main)
-
     await state.clear()

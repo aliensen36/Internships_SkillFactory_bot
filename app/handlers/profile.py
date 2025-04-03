@@ -39,8 +39,24 @@ async def profile_handler(message: Message,
 
 
 @profile_router.message(F.text == "Изменить курс")
-async def change_specialization_start(message: Message, state: FSMContext,
-                                session: AsyncSession):
+async def change_specialization_start(message: Message,
+                                      state: FSMContext,
+                                      session: AsyncSession):
+    # Загружаем текущие данные пользователя перед изменением
+    stmt = select(User).where(User.tg_id == message.from_user.id).options(
+        selectinload(User.specialization),
+        selectinload(User.course)
+    )
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user:
+    # Сохраняем текущие значения в state
+        await state.update_data(
+            old_spec_id = user.specialization_id,
+            old_course_id = user.course_id
+        )
+
     await message.answer("🎯 Выбери специализацию:",
                          reply_markup=await change_specialization_keyboard(session))
     await state.set_state(ChangeCourseState.waiting_for_specialization)
@@ -55,44 +71,36 @@ async def change_specialization(callback: CallbackQuery,
     if not spec_id.isdigit():
         await callback.answer("❌ Некорректный ID специализации.", show_alert=True)
         return
-    await state.update_data(spec_id=spec_id)
 
-    stmt = select(User).where(User.tg_id == callback.from_user.id)
-    result = await session.execute(stmt)
-    user = result.scalar_one_or_none()
+    # Сохраняем новую специализацию в state, но пока не применяем к пользователю
+    await state.update_data(new_spec_id=int(spec_id))
 
-    if user:
-        spec_stmt = select(Specialization).where(Specialization.id == int(spec_id))
-        spec_result = await session.execute(spec_stmt)
-        specialization = spec_result.scalar_one_or_none()
+    stmt = select(Specialization).where(Specialization.id == int(spec_id))
+    spec_result = await session.execute(stmt)
+    specialization = spec_result.scalar_one_or_none()
 
-        if specialization:
-            user.specialization_id = specialization.id
-            await session.commit()
+    if specialization:
+        await callback.message.edit_text(
+            f"✅ Выбрана специализация:\n\n<b>{specialization.name}</b>",
+            parse_mode="HTML"
+        )
 
-            await callback.message.edit_text(
-                f"✅ Выбрана специализация:\n\n<b>{specialization.name}</b>",
-                parse_mode="HTML"
+        # Проверяем, есть ли курсы по этой специализации
+        keyboard = await change_courses_keyboard(session, int(spec_id), 0)
+
+        if keyboard is None:
+            await callback.message.answer(
+                "❌ Курсов не найдено. Выбери другую специализацию:",
+                reply_markup=await specialization_keyboard(session)
             )
-            # Проверяем, есть ли курсы по этой специализации
-            keyboard = await change_courses_keyboard(session, user.specialization_id, 0)
-
-            if keyboard is None:
-                await callback.message.answer(
-                    "❌ Курсов не найдено. Выбери другую специализацию:",
-                    reply_markup=await specialization_keyboard(session)  # Подставляем клавиатуру выбора специализации
-                )
-            else:
-                await callback.message.answer(
-                    "🎓 Теперь выбери курс, который тебя интересует:",
-                    reply_markup=keyboard
-                )
         else:
-            await callback.answer("❌ Специализация не найдена.", show_alert=True)
+            await callback.message.answer(
+                "🎓 Теперь выбери курс, который тебя интересует:",
+                reply_markup=keyboard
+            )
+            await state.set_state(ChangeCourseState.waiting_for_course)
     else:
-        await callback.answer("❌ Пользователь не найден.", show_alert=True)
-
-    await state.set_state(ChangeCourseState.waiting_for_course)
+        await callback.answer("❌ Специализация не найдена.", show_alert=True)
 
 
 @profile_router.callback_query(ChangeCourseState.waiting_for_course,
@@ -104,25 +112,56 @@ async def change_course(callback: CallbackQuery, state: FSMContext,
     if not course_id.isdigit():
         await callback.answer("❌ Некорректный ID курса.", show_alert=True)
         return
-    await state.update_data(course_id=course_id)
-    stmt = select(Course).where(Course.id == int(course_id))
-    result = await session.execute(stmt)
-    course = result.scalar_one_or_none()
 
-    if course:
-        stmt = select(User).where(User.tg_id == callback.from_user.id)
-        result = await session.execute(stmt)
-        user = result.scalar_one_or_none()
-        user.course_id = course.id
+    # Получаем все данные из state
+    state_data = await state.get_data()
+    new_spec_id = state_data.get('new_spec_id')
+
+    stmt = select(User).where(User.tg_id == callback.from_user.id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user:
+        # Обновляем и специализацию, и курс
+        user.specialization_id = new_spec_id
+        user.course_id = int(course_id)
         await session.commit()
+
+        stmt = select(Course).where(Course.id == int(course_id))
+        result = await session.execute(stmt)
+        course = result.scalar_one_or_none()
 
         await callback.message.edit_text(
             f"✅ Выбран курс:\n\n<b>{course.name}</b>",
             parse_mode="HTML"
         )
     else:
-        await callback.answer("❌ Курс не найден.", show_alert=True)
+        await callback.answer("❌ Пользователь не найден.", show_alert=True)
     await state.clear()
+
+
+@profile_router.message(F.text == "Назад")
+async def back_to_main_menu(message: Message, state: FSMContext, session: AsyncSession):
+    # Проверяем, есть ли незавершенный процесс изменения курса
+    current_state = await state.get_state()
+    if current_state == ChangeCourseState.waiting_for_course:
+        # Восстанавливаем старые значения
+        state_data = await state.get_data()
+        old_spec_id = state_data.get('old_spec_id')
+        old_course_id = state_data.get('old_course_id')
+
+        stmt = select(User).where(User.tg_id == message.from_user.id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if user:
+            # Восстанавливаем только если пользователь не завершил выбор курса
+            user.specialization_id = old_spec_id
+            user.course_id = old_course_id
+            await session.commit()
+
+    await state.clear()
+    await message.answer("Главное меню", reply_markup=kb_main)
 
 
 # Пагинация при изменении курса
@@ -142,8 +181,3 @@ async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
         await callback.message.edit_reply_markup(reply_markup=keyboard)
     except TelegramBadRequest:
         pass  # Игнорируем, если клавиатура не изменилась
-
-
-@profile_router.message(F.text == "Назад")
-async def back_to_main_menu(message: Message):
-    await message.answer("Главное меню", reply_markup=kb_main)

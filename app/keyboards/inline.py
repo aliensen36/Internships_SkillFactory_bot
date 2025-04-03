@@ -172,7 +172,7 @@ async def get_project_details_keyboard(project_id: int, session: AsyncSession):
     )
 
     # Распределяем кнопки по 2 в ряду
-    builder.adjust(2, 2, 2)
+    builder.adjust(1)
     return builder.as_markup()
 
 async def project_details_message(project: Project) -> str:

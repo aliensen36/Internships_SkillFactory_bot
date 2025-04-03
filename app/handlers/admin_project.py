@@ -260,6 +260,17 @@ async def select_project_to_edit(callback: CallbackQuery, state: FSMContext,
 async def skip_title_edit(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
 
+    # Если project_id нет — ошибка
+    if 'project_id' not in data:
+        await callback.answer("❌ Ошибка: проект не выбран.", show_alert=True)
+        return
+
+    # Сохраняем текущие данные и переходим к следующему шагу
+    await state.update_data(
+        new_title=data.get('current_title'),  # Если не меняли, оставляем старое название
+        project_id=data['project_id']  # Обязательно передаём project_id дальше!
+    )
+
     skip_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="⏭ Пропустить",
@@ -365,26 +376,32 @@ async def skip_benefit_edit(callback: CallbackQuery, state: FSMContext, session:
 async def process_new_benefit(message: Message, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
 
+    if 'project_id' not in data:
+        await message.answer("❌ Ошибка: проект не выбран. Начните заново.")
+        await state.clear()
+        return
+
     # Обновляем проект
     project = await session.get(Project, data['project_id'])
-    if project:
-        if 'new_title' in data:
-            project.title = data['new_title']
-        if 'new_description' in data:
-            project.description = data['new_description']
-        project.benefit = message.text  # Обновляем бенефиты
-
-        await session.commit()
-
-        await message.answer(
-            f"✅ Проект <b>{project.title}</b> успешно изменен",
-            parse_mode="HTML"
-        )
-    else:
+    if not project:
         await message.answer("⚠️ Проект не найден")
+        await state.clear()
+        return
 
+    # Обновляем данные проекта
+    if 'new_title' in data:
+        project.title = data['new_title']
+    if 'new_description' in data:
+        project.description = data['new_description']
+    project.benefit = message.text  # Обновляем бенефиты
+
+    await session.commit()
+
+    await message.answer(
+        f"✅ Проект <b>{project.title}</b> успешно изменен",
+        parse_mode="HTML"
+    )
     await state.clear()
-
 
 
 # =====================================================================================

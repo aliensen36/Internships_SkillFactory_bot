@@ -43,7 +43,7 @@ async def start_handler(message: Message, session: AsyncSession):
                              parse_mode="HTML")
     else:
         # Приветствие зарегистрированного пользователя
-        await message.answer("🎉 С возвращением! 🎉",
+        await message.answer("🎉 С возвращением!",
                              reply_markup=kb_main)
 
 
@@ -132,7 +132,7 @@ async def course(callback: CallbackQuery, session: AsyncSession):
         await callback.message.answer("🚀 Отлично! 🎉\n\nТеперь у тебя есть доступ к"
                                       " <b>проектам</b> курса 📚.\nТы будешь получать "
                                       "уведомления о новых проектах 🔔.\n\n"
-                                      "<i>Изменить курс можно в профиле.</i>",
+                                      "<i>Изменить курс можно по кнопке 'Мой курс'.</i>",
                                       reply_markup=kb_main,
                                       parse_mode="HTML")
     else:

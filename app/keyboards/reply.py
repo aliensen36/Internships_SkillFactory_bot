@@ -8,8 +8,7 @@ from database.models import Project
 
 # Главное меню
 kb_main = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="ℹ️ О Factory"), KeyboardButton(text="⭐ Проекты")],
-    [KeyboardButton(text="👤 Мой профиль")],
+    [KeyboardButton(text="О Factory"), KeyboardButton(text="Проекты"), KeyboardButton(text="Мой курс")]
 ],
     resize_keyboard=True
 )
@@ -18,7 +17,7 @@ kb_main = ReplyKeyboardMarkup(keyboard=[
 
 # Клавиатура Профиля
 kb_profile = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="🔁 Изменить курс"), KeyboardButton(text="🔙 Назад")]
+    [KeyboardButton(text="Изменить курс"), KeyboardButton(text="Назад")]
 ],
     resize_keyboard=True
 )

@@ -15,7 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 profile_router = Router()
 
 
-@profile_router.message(F.text == "👤 Мой профиль")
+@profile_router.message(F.text == "Мой курс")
 async def profile_handler(message: Message,
                           session: AsyncSession):
     stmt = select(User).where(User.tg_id == message.from_user.id).options(
@@ -29,9 +29,8 @@ async def profile_handler(message: Message,
         specialization = user.specialization.name if user.specialization else "не выбрано"
         course = user.course.name if user.course else "не выбран"
         await message.answer(
-            f"👤 <b>Твой профиль</b>\n\n"
-            f"🔸 Выбранна специализация:\n<b>{specialization}</b>\n\n"
-            f"🔹 Выбранный курс:\n<b>{course}</b>",
+            f"🔸 Выбрана специализация:\n<b>{specialization}</b>\n\n"
+            f"🔹 Выбран курс:\n<b>{course}</b>",
             parse_mode="HTML",
             reply_markup=kb_profile
         )
@@ -39,10 +38,10 @@ async def profile_handler(message: Message,
         await message.answer("Профиль не найден. Попробуй снова /start.")
 
 
-@profile_router.message(F.text == "🔁 Изменить курс")
+@profile_router.message(F.text == "Изменить курс")
 async def change_specialization_start(message: Message, state: FSMContext,
                                 session: AsyncSession):
-    await message.answer("🎯 Выберите специализацию:",
+    await message.answer("🎯 Выбери специализацию:",
                          reply_markup=await change_specialization_keyboard(session))
     await state.set_state(ChangeCourseState.waiting_for_specialization)
 
@@ -145,6 +144,6 @@ async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
         pass  # Игнорируем, если клавиатура не изменилась
 
 
-@profile_router.message(F.text == "🔙 Назад")
+@profile_router.message(F.text == "Назад")
 async def back_to_main_menu(message: Message):
     await message.answer("Главное меню", reply_markup=kb_main)

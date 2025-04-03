@@ -20,8 +20,8 @@ projects_router = Router()
 logger = logging.getLogger(__name__)
 
 
-# Хэндлер для кнопки "⭐ Проекты"
-@projects_router.message(F.text == "⭐ Проекты")
+# Хэндлер для кнопки "Проекты"
+@projects_router.message(F.text == "Проекты")
 async def projects_button(message: Message, session: AsyncSession):
     try:
         keyboard = await view_projects_keyboard(session)

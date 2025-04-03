@@ -2,8 +2,12 @@ import asyncio
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
+from aiogram.fsm import state
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram import F, Router
+
+from app.fsm_states import StartState
 from app.keyboards.reply import *
 from app.keyboards.inline import *
 from app.text import *
@@ -14,8 +18,11 @@ start_router = Router()
 
 
 @start_router.message(CommandStart())
-async def start_handler(message: Message, session: AsyncSession):
+async def start_handler(message: Message,
+                        state: FSMContext,
+                        session: AsyncSession):
     tg_user = message.from_user
+
     # Проверка наличия пользователь в БД
     stmt = select(User).where(User.tg_id == tg_user.id)
     result = await session.execute(stmt)
@@ -41,6 +48,7 @@ async def start_handler(message: Message, session: AsyncSession):
         await message.answer(choose_msg,
                              reply_markup=await specialization_keyboard(session),
                              parse_mode="HTML")
+        await state.set_state(StartState.waiting_for_specialization)
     else:
         # Приветствие зарегистрированного пользователя
         await message.answer("🎉 С возвращением!",
@@ -48,8 +56,11 @@ async def start_handler(message: Message, session: AsyncSession):
 
 
 # Выбор специализации
-@start_router.callback_query(F.data.startswith("spec_"))
-async def specialization(callback: CallbackQuery, session: AsyncSession):
+@start_router.callback_query(StartState.waiting_for_specialization,
+                             F.data.startswith("spec_"))
+async def specialization(callback: CallbackQuery,
+                         state: FSMContext,
+                         session: AsyncSession):
     spec_id = callback.data.replace("spec_", "").strip()
     if not spec_id.isdigit():
         await callback.answer("❌ Некорректный ID специализации.", show_alert=True)
@@ -86,6 +97,7 @@ async def specialization(callback: CallbackQuery, session: AsyncSession):
                     "🎓 Теперь выбери курс, который тебя интересует:",
                     reply_markup=keyboard
                 )
+                await state.set_state(StartState.waiting_for_course)
         else:
             await callback.answer("❌ Специализация не найдена.", show_alert=True)
     else:
@@ -93,8 +105,11 @@ async def specialization(callback: CallbackQuery, session: AsyncSession):
 
 
 # Выбор курса
-@start_router.callback_query(F.data.startswith("course_"))
-async def course(callback: CallbackQuery, session: AsyncSession):
+@start_router.callback_query(StartState.waiting_for_course,
+                             F.data.startswith("course_"))
+async def course(callback: CallbackQuery,
+                 state: FSMContext,
+                 session: AsyncSession):
     course_id = callback.data.replace("course_", "")
 
     # Проверка на корректность id
@@ -135,13 +150,16 @@ async def course(callback: CallbackQuery, session: AsyncSession):
                                       "<i>Изменить курс можно по кнопке 'Мой курс'.</i>",
                                       reply_markup=kb_main,
                                       parse_mode="HTML")
+        await state.clear()
     else:
         await callback.answer("❌ Курс не найден или не соответствует твоей специализации.", show_alert=True)
 
 
 # Пагинация при выборе курса
-@start_router.callback_query(F.data.startswith("page_"))
-async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
+@start_router.callback_query(StartState.waiting_for_course,
+                             F.data.startswith("page_"))
+async def paginate_courses(callback: CallbackQuery,
+                           session: AsyncSession):
     _, specialization_id, page = callback.data.split("_")
 
     if not specialization_id.isdigit() or not page.isdigit():
@@ -156,24 +174,3 @@ async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
         await callback.message.edit_reply_markup(reply_markup=keyboard)
     except TelegramBadRequest:
         pass  # Игнорируем, если клавиатура не изменилась
-
-
-# @start_router.callback_query(F.data.startswith("factory_"))
-# async def explain_factory_format(callback: CallbackQuery):
-#     explanations = {
-#         "factory_internship": "💼 Стажировки — практика на реальных задачах от "
-#                               "компаний и НКО.",
-#         "factory_hackathon": "⚡ Хакатоны — командные соревнования с интересными "
-#                              "задачами и сжатыми сроками.",
-#         "factory_megahack": "🚀 Мегахакатоны — масштабные события с топовыми "
-#                             "кейсами.",
-#         "factory_contest": "🏆 Конкурсы — возможность проявить себя и выиграть "
-#                            "призы.",
-#         "factory_gamejam": "🎮 Геймджемы — создание игр за короткое время, креатив "
-#                            "и фановый опыт!",
-#         "factory_special": "🎯 Спецпроекты — необычные задания и коллаборации "
-#                            "с бизнесом и НКО."
-#     }
-#
-#     text = explanations.get(callback.data, "❓ Неизвестный формат.")
-#     await callback.answer(text, show_alert=True)

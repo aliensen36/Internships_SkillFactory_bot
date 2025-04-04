@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 
 # Хэндлер для кнопки "Проекты"
 @projects_router.message(F.text == "Проекты")
-async def projects_button(message: Message, session: AsyncSession):
+async def projects_button(message: Message,
+                          session: AsyncSession):
     try:
         keyboard = await view_projects_keyboard(session)
         await message.answer(
-            "📂 <b>Выбери проект</b>",
+            "<b>Выбери проект</b>",
             reply_markup=keyboard.as_markup(
                 resize_keyboard=True,
                 one_time_keyboard=False
@@ -41,10 +42,11 @@ async def projects_button(message: Message, session: AsyncSession):
 
 # Хендлер для отображения списка проектов
 @projects_router.callback_query(F.data == "back_to_projects_list")
-async def back_to_projects_list(callback: CallbackQuery, session: AsyncSession):
+async def back_to_projects_list(callback: CallbackQuery,
+                                session: AsyncSession):
     keyboard = await view_projects_keyboard(session)
     await callback.message.edit_text(
-        "📂 <b>Выбери проект</b>",
+        "<b>Выбери проект</b>",
         reply_markup=keyboard.as_markup(
             resize_keyboard=True,
             one_time_keyboard=False),
@@ -54,7 +56,8 @@ async def back_to_projects_list(callback: CallbackQuery, session: AsyncSession):
 
 # Хендлер для просмотра конкретного проекта
 @projects_router.callback_query(ProjectCallbackFilter(prefix="view_project_"))
-async def view_project(callback: CallbackQuery, session: AsyncSession):
+async def view_project(callback: CallbackQuery,
+                       session: AsyncSession):
     project_id = int(callback.data.split("_")[-1])
     project = await session.get(Project, project_id)
 
@@ -66,7 +69,7 @@ async def view_project(callback: CallbackQuery, session: AsyncSession):
 
     try:
         # Пытаемся отредактировать сообщение как текст
-        await callback.message.edit_text(
+        await callback.message.answer(
             message_text,
             reply_markup=await get_project_details_keyboard(project_id, session),
             parse_mode="HTML"

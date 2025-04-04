@@ -248,6 +248,59 @@ async def change_courses_keyboard(session: AsyncSession,
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
+# =====================================================================================
+# ------------------------------- Административный раздел -----------------------------
+# =====================================================================================
+
+
+async def admin_main_menu():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Проекты", callback_data="admin_projects"),
+        InlineKeyboardButton(text="Специализации", callback_data="admin_specializations"),
+        InlineKeyboardButton(text="Курсы", callback_data="admin_courses"),
+        InlineKeyboardButton(text="Рассылка", callback_data="admin_mailing"),
+        InlineKeyboardButton(text="Статистика", callback_data="admin_stats")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2, 2, 1)
+
+    return builder.as_markup()
+
+
+async def admin_projects_menu():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Список", callback_data="projects:list"),
+        InlineKeyboardButton(text="Добавить", callback_data="projects:add"),
+        InlineKeyboardButton(text="Изменить", callback_data="projects:edit"),
+        InlineKeyboardButton(text="Удалить", callback_data="projects:delete"),
+        InlineKeyboardButton(text="Назад", callback_data="admin:main_menu")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2, 2, 1)
+
+    return builder.as_markup()
+
+
+async def confirm_cancel_projects():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_action"),
+        InlineKeyboardButton(text="Отменить", callback_data="cancel_action")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2)
+
+    return builder.as_markup()
+
+
 
 # ======================================================================================
 # -------------------------------------- Рассылка -------------------------------------

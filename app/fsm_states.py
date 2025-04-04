@@ -23,11 +23,13 @@ class ProjectAddState(StatesGroup):
     waiting_for_confirmation = State()
 
 
-
 class ProjectEditState(StatesGroup):
+    waiting_for_project_selection = State()
     waiting_for_title = State()
     waiting_for_description = State()
     waiting_for_benefit = State()
+    waiting_for_confirmation = State()
+
 
 
 class ProjectDeleteState(StatesGroup):

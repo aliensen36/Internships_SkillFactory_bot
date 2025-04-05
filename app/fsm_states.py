@@ -42,6 +42,24 @@ class SpecializationState(StatesGroup):
     waiting_for_name = State()
 
 
+class SpecializationAddState(StatesGroup):
+    waiting_for_name = State()
+    waiting_for_confirmation = State()
+
+
+class SpecializationEditState(StatesGroup):
+    waiting_for_specialization_selection = State()
+    waiting_for_name = State()
+    waiting_for_confirmation = State()
+
+
+class SpecializationDeleteState(StatesGroup):
+    waiting_for_delete = State()
+    waiting_for_confirmation = State()
+
+
+
+
 class CourseState(StatesGroup):
     waiting_for_action = State()
     waiting_for_specialization = State()

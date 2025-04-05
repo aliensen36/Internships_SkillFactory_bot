@@ -86,7 +86,7 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
     benefit: Mapped[str] = mapped_column(Text, nullable=True)
     example: Mapped[str] = mapped_column(Text, nullable=True)
 
@@ -183,7 +183,7 @@ class BroadcastCourseAssociation(Base):
     )
     project_id: Mapped[int] = mapped_column(
         ForeignKey('projects.id', ondelete="CASCADE"),
-        nullable=False
+        nullable=True
     )
 
     broadcast: Mapped["Broadcast"] = relationship(back_populates="course_associations")

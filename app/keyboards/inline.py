@@ -269,7 +269,9 @@ async def admin_main_menu():
 
     return builder.as_markup()
 
+# ------------------------------------- Проекты ---------------------------------------
 
+# Главное меню управления проектами
 async def admin_projects_menu():
     builder = InlineKeyboardBuilder()
 
@@ -278,7 +280,7 @@ async def admin_projects_menu():
         InlineKeyboardButton(text="Добавить", callback_data="projects:add"),
         InlineKeyboardButton(text="Изменить", callback_data="projects:edit"),
         InlineKeyboardButton(text="Удалить", callback_data="projects:delete"),
-        InlineKeyboardButton(text="Назад", callback_data="admin:main_menu")
+        InlineKeyboardButton(text="Назад", callback_data="projects:admin_main_menu")
     ]
 
     builder.add(*buttons)
@@ -287,12 +289,13 @@ async def admin_projects_menu():
     return builder.as_markup()
 
 
-async def confirm_cancel_projects():
+# Подтверждение/отмена добавления проекта
+async def confirm_cancel_add_projects():
     builder = InlineKeyboardBuilder()
 
     buttons = [
-        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_action"),
-        InlineKeyboardButton(text="Отменить", callback_data="cancel_action")
+        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_add_project"),
+        InlineKeyboardButton(text="Отменить", callback_data="cancel_add_project")
     ]
 
     builder.add(*buttons)
@@ -300,6 +303,93 @@ async def confirm_cancel_projects():
 
     return builder.as_markup()
 
+
+# Подтверждение/отмена изменения проекта
+async def confirm_cancel_edit_projects():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_edit_project"),
+        InlineKeyboardButton(text="Отменить", callback_data="cancel_edit_project")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2)
+
+    return builder.as_markup()
+
+# Подтверждение/отмена удаления проектов
+async def confirm_delete_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        InlineKeyboardButton(text="Да, удалить", callback_data="delete_projects:confirm"),
+        InlineKeyboardButton(text="Нет, отменить", callback_data="delete_projects:cancel")
+    )
+    return builder.as_markup()
+
+
+
+# ------------------------------------- Специализации ---------------------------------
+
+
+
+# Главное меню управления специализациями
+async def admin_specializations_menu():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Список", callback_data="specializations:list"),
+        InlineKeyboardButton(text="Добавить", callback_data="specializations:add"),
+        InlineKeyboardButton(text="Изменить", callback_data="specializations:edit"),
+        InlineKeyboardButton(text="Удалить", callback_data="specializations:delete"),
+        InlineKeyboardButton(text="Назад", callback_data="specializations:admin_main_menu")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2, 2, 1)
+
+    return builder.as_markup()
+
+
+# Подтверждение/отмена добавления специализации
+async def confirm_cancel_add_specializations():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_add_specialization"),
+        InlineKeyboardButton(text="Отменить", callback_data="cancel_add_specialization")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2)
+
+    return builder.as_markup()
+
+
+# Подтверждение/отмена изменения специализации
+async def confirm_cancel_edit_specializations():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_edit_specialization"),
+        InlineKeyboardButton(text="Отменить", callback_data="cancel_edit_specialization")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2)
+
+    return builder.as_markup()
+
+# Подтверждение/отмена удаления специализаций
+async def confirm_delete_specializations():
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        InlineKeyboardButton(text="Да, удалить",
+                             callback_data="delete_specializations:confirm"),
+        InlineKeyboardButton(text="Нет, отменить",
+                             callback_data="delete_specializations:cancel")
+    )
+    return builder.as_markup()
 
 
 # ======================================================================================

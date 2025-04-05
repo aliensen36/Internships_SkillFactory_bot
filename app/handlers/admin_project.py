@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import ProjectAddState, ProjectEditState, ProjectDeleteState
-from app.keyboards.inline import admin_projects_menu, confirm_cancel_projects
-from app.keyboards.reply import kb_admin_main, confirm_cancel_keyboard, confirm_delete_keyboard
+from app.keyboards.inline import admin_projects_menu, confirm_delete_keyboard, admin_main_menu, \
+    confirm_cancel_add_projects, confirm_cancel_edit_projects
+from app.keyboards.reply import kb_admin_main
 from database.models import Project
 
 
@@ -133,13 +134,13 @@ async def add_project_benefit(message: Message,
     )
 
     await message.answer(preview_message,
-                         reply_markup = await confirm_cancel_projects(),
+                         reply_markup = await confirm_cancel_add_projects(),
                          parse_mode="HTML")
     await state.set_state(ProjectAddState.waiting_for_confirmation)
 
 
 @admin_project_router.callback_query(ProjectAddState.waiting_for_confirmation,
-                              F.data == "confirm_action")
+                              F.data == "confirm_add_project")
 async def confirm_project_add(callback: CallbackQuery,
                               state: FSMContext,
                               session: AsyncSession):
@@ -160,12 +161,13 @@ async def confirm_project_add(callback: CallbackQuery,
     await state.clear()
 
 
-@admin_project_router.callback_query(F.data == "cancel_action")
+@admin_project_router.callback_query(F.data == "cancel_add_project")
 async def confirm_project_add(callback: CallbackQuery,
-                              state: FSMContext,
-                              session: AsyncSession):
+                              state: FSMContext):
     await callback.message.answer("❌ Добавление проекта отменено.",
                                   reply_markup=await admin_projects_menu())
+    await callback.answer()
+    await state.clear()
 
 
 
@@ -175,45 +177,20 @@ async def confirm_project_add(callback: CallbackQuery,
 
 
 
-# Общий обработчик кнопки "Отменить"
-@admin_project_router.message(F.text == "Отменить",
-                              ProjectEditState.waiting_for_project_selection)
-@admin_project_router.message(F.text == "Отменить",
-                              ProjectEditState.waiting_for_title)
-@admin_project_router.message(F.text == "Отменить",
-                              ProjectEditState.waiting_for_description)
-@admin_project_router.message(F.text == "Отменить",
-                              ProjectEditState.waiting_for_benefit)
-@admin_project_router.message(F.text == "Отменить",
-                              ProjectEditState.waiting_for_confirmation)
-async def cancel_project_edit(message: Message,
-                              state: FSMContext):
-    await state.clear()
-    await message.answer(
-        "Изменение проекта отменено.",
-        reply_markup=projects_menu_keyboard()
-    )
-
-# Обработчик для случаев, когда нет активного редактирования
-# @admin_project_router.message(F.text == "❌ Отменить")
-# async def cancel_without_active_edit(message: Message):
-#     await message.answer("Нет активного процесса изменения проекта.")
-
-
-@admin_project_router.message(F.text == "✏️ Изменить")
-async def edit_project(message: Message,
+@admin_project_router.callback_query(F.data == "projects:edit")
+async def edit_project(callback: CallbackQuery,
                        state: FSMContext,
                        session: AsyncSession):
     await state.set_state(ProjectEditState.waiting_for_project_selection)
     try:
-        await message.answer("Изменение проекта",
-                             reply_markup=confirm_cancel_keyboard)
+        await callback.message.answer("Изменение проекта")
+        await callback.answer()
 
         result = await session.execute(select(Project))
         projects = result.scalars().all()
 
         if not projects:
-            await message.answer("📭 Список проектов пуст")
+            await callback.message.answer("📭 Список проектов пуст")
             return
 
         # Создаем клавиатуру
@@ -229,14 +206,14 @@ async def edit_project(message: Message,
         # Форматируем кнопки
         builder.adjust(1, repeat=True)
 
-        await message.answer(
+        await callback.message.answer(
             "<b>Выбери проект для редактирования</b>",
             reply_markup=builder.as_markup(),
             parse_mode="HTML"
         )
 
     except Exception as e:
-        await message.answer("⚠️ Произошла ошибка при загрузке проектов")
+        await callback.message.answer("⚠️ Произошла ошибка при загрузке проектов")
         logging.error(f"Error in view_projects: {e}")
 
 
@@ -400,7 +377,7 @@ async def skip_benefit_edit(callback: CallbackQuery,
     await callback.message.answer(
         preview_message,
         parse_mode="HTML",
-        reply_markup=confirm_cancel_keyboard
+        reply_markup=await confirm_cancel_edit_projects()
     )
     await state.set_state(ProjectEditState.waiting_for_confirmation)
     await callback.answer()
@@ -434,27 +411,27 @@ async def process_new_benefit(message: Message,
     await message.answer(
         preview_message,
         parse_mode="HTML",
-        reply_markup=confirm_cancel_keyboard
+        reply_markup=await confirm_cancel_edit_projects()
     )
     await state.set_state(ProjectEditState.waiting_for_confirmation)
 
 
 # Обработчик подтверждения изменений
-@admin_project_router.message(ProjectEditState.waiting_for_confirmation,
-                              F.text == "Подтвердить")
-async def confirm_project_edit(message: Message,
+@admin_project_router.callback_query(ProjectEditState.waiting_for_confirmation,
+                              F.data == "confirm_edit_project")
+async def confirm_project_edit(callback: CallbackQuery,
                                state: FSMContext,
                                session: AsyncSession):
     data = await state.get_data()
 
     if 'project_id' not in data:
-        await message.answer("❌ Ошибка: проект не выбран. Начните заново.")
+        await callback.message.answer("❌ Ошибка: проект не выбран. Начните заново.")
         await state.clear()
         return
 
     project = await session.get(Project, data['project_id'])
     if not project:
-        await message.answer("⚠️ Проект не найден")
+        await callback.message.answer("⚠️ Проект не найден")
         await state.clear()
         return
 
@@ -468,17 +445,25 @@ async def confirm_project_edit(message: Message,
 
     await session.commit()
 
-    await message.answer(
+    await callback.message.answer(
         f"Проект <b>{project.title}</b> успешно изменен",
         parse_mode="HTML",
-        reply_markup=projects_menu_keyboard()
+        reply_markup=await admin_projects_menu()
     )
+    await callback.answer()
     await state.clear()
 
 
-# @admin_project_router.message(F.text == "❌ Отменить")
-# async def cancel_without_active_process(message: Message):
-#     await message.answer("Нет активного процесса добавления или изменения проекта.")
+# Обработчик отмены изменений
+@admin_project_router.callback_query(F.data == "cancel_edit_project")
+async def cancel_project_edit(callback: CallbackQuery,
+                               state: FSMContext,
+                               session: AsyncSession):
+    await callback.message.answer("Изменение проекта отменено.",
+                                  reply_markup=await admin_projects_menu())
+    await callback.answer()
+    await state.clear()
+
 
 
 # =====================================================================================
@@ -487,16 +472,16 @@ async def confirm_project_edit(message: Message,
 
 
 
-@admin_project_router.message(F.text == "🗑️ Удалить")
-async def delete_project_start(message: Message,
-                         state: FSMContext,
-                         session: AsyncSession):
+@admin_project_router.callback_query(F.data == "projects:delete")
+async def delete_project_start(callback: CallbackQuery,
+                               state: FSMContext,
+                               session: AsyncSession):
     try:
         result = await session.execute(select(Project))
         projects = result.scalars().all()
 
         if not projects:
-            await message.answer("📭 Список проектов пуст")
+            await callback.message.answer("📭 Список проектов пуст")
             return
 
         # Создаем клавиатуру
@@ -512,15 +497,17 @@ async def delete_project_start(message: Message,
         # Форматируем кнопки
         builder.adjust(1, repeat=True)
 
-        await message.answer(
+        await callback.message.answer(
             "📂 <b>Выбери проект для удаления</b>",
             reply_markup=builder.as_markup(),
             parse_mode="HTML"
         )
+        await callback.answer()
 
     except Exception as e:
-        await message.answer("⚠️ Произошла ошибка при загрузке проектов")
+        await callback.message.answer("⚠️ Произошла ошибка при загрузке проектов")
         logging.error(f"Error in view_projects: {e}")
+        await callback.answer()
 
     await state.set_state(ProjectDeleteState.waiting_for_delete)
 
@@ -541,17 +528,16 @@ async def select_project_to_delete(callback: CallbackQuery,
     await state.set_state(ProjectDeleteState.waiting_for_confirmation)
 
     await callback.message.answer(
-        f"⚠️ Вы уверены, что хотите удалить проект:\n\n"
-        f"<b>{project.title}</b>?",
+        f"⚠️ Вы уверены, что хотите удалить проект  <b>{project.title}</b>?",
         parse_mode="HTML",
-        reply_markup=confirm_delete_keyboard
+        reply_markup=await confirm_delete_keyboard()
     )
     await callback.answer()
 
 
-@admin_project_router.message(ProjectDeleteState.waiting_for_confirmation,
-                              F.text == "✅ Да, удалить")
-async def confirm_project_delete(message: Message,
+@admin_project_router.callback_query(ProjectDeleteState.waiting_for_confirmation,
+                              F.data == "delete_projects:confirm")
+async def confirm_project_delete(callback: CallbackQuery,
                                  state: FSMContext,
                                  session: AsyncSession):
     data = await state.get_data()
@@ -560,38 +546,45 @@ async def confirm_project_delete(message: Message,
     if project:
         await session.delete(project)
         await session.commit()
-        await message.answer(
+        await callback.message.answer(
             f"🗑️ Проект <b>{data['project_title']}</b> успешно удален!",
             parse_mode="HTML",
-            reply_markup=projects_menu_keyboard()
+            reply_markup=await admin_projects_menu()
         )
+        await callback.answer()
     else:
-        await message.answer(
+        await callback.message.answer(
             "⚠️ Проект не найден или уже был удален",
-            reply_markup=projects_menu_keyboard()
+            reply_markup=await admin_projects_menu()
         )
+        await callback.answer()
 
     await state.clear()
 
 
-@admin_project_router.message(ProjectDeleteState.waiting_for_confirmation,
-                              F.text == "❌ Нет, отменить")
-async def cancel_project_delete(message: Message,
+@admin_project_router.callback_query(ProjectDeleteState.waiting_for_confirmation,
+                                     F.data == "delete_projects:cancel")
+async def cancel_project_delete(callback: CallbackQuery,
                                 state: FSMContext):
     data = await state.get_data()
-    await message.answer(
+    await callback.message.answer(
         f"❌ Удаление проекта <b>{data.get('project_title', '')}</b> отменено",
         parse_mode="HTML",
-        reply_markup=projects_menu_keyboard()
+        reply_markup=await admin_projects_menu()
     )
+    await callback.answer()
     await state.clear()
 
 
 
+# =====================================================================================
+# ---------------------------------------- Назад -------------------------------------
+# =====================================================================================
 
 
 
-@admin_project_router.message(F.text == "◀️ Назад")
-async def back_to_main_menu(message: Message):
-    await message.answer("Возврат в главное админ-меню",
-                       reply_markup=kb_admin_main)
+@admin_project_router.callback_query(F.data == "projects:admin_main_menu")
+async def back_to_main_menu(callback: CallbackQuery):
+    await callback.message.answer("Возврат в главное админ-меню",
+                                  reply_markup=await admin_main_menu())
+    await callback.answer()

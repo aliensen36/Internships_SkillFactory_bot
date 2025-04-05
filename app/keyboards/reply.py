@@ -33,7 +33,7 @@ kb_profile = ReplyKeyboardMarkup(keyboard=[
 
 
 
-# Главная клавиатура админа
+# Кнопка выхода из админ-панели
 kb_admin_main = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='Выйти из админ-панели')],
 ],
@@ -43,39 +43,12 @@ kb_admin_main = ReplyKeyboardMarkup(keyboard=[
 
 
 
-# Подтверждение/отмена действий над проектами
-confirm_cancel_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Подтвердить"), KeyboardButton(text="Отменить")]
-    ],
-    resize_keyboard=True
-)
-
-
-# Клавиатура для подтверждения удаления проекта
-confirm_delete_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Да, удалить"), KeyboardButton(text="Нет, отменить")]
-    ],
-    resize_keyboard=True
-)
-
-
 kb_specializations_courses = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text= 'Специализации'), KeyboardButton(text='Курсы')],
     [KeyboardButton(text='Назад')],
 ],
     resize_keyboard=True
 )
-
-
-# kb_specializations = ReplyKeyboardMarkup(keyboard=[
-#     [KeyboardButton(text='👁️ Просмотр'), KeyboardButton(text='➕ Добавить')],
-#     [KeyboardButton(text='✏️ Изменить'), KeyboardButton(text='🗑️ Удалить')],
-#     [KeyboardButton(text='⬅️ Назад')],
-# ],
-#     resize_keyboard=True,
-# )
 
 
 async def specializations_keyboard():

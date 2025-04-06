@@ -31,7 +31,6 @@ class ProjectEditState(StatesGroup):
     waiting_for_confirmation = State()
 
 
-
 class ProjectDeleteState(StatesGroup):
     waiting_for_delete = State()
     waiting_for_confirmation = State()
@@ -58,14 +57,30 @@ class SpecializationDeleteState(StatesGroup):
     waiting_for_confirmation = State()
 
 
-
-
 class CourseState(StatesGroup):
     waiting_for_action = State()
     waiting_for_specialization = State()
-    waiting_for_course = State()
+    waiting_for_name = State()
+
+
+class CourseAddState(StatesGroup):
+    waiting_for_specialization = State()
+    waiting_for_name = State()
+    waiting_for_confirmation = State()
+
+
+class CourseEditState(StatesGroup):
+    waiting_for_specialization_selection = State()
+    waiting_for_course_selection = State()
+    waiting_for_name = State()
+    waiting_for_confirmation = State()
+
+
+class CourseDeleteState(StatesGroup):
+    waiting_for_delete = State()
+    waiting_for_confirmation = State()
+
 
 class ChangeCourseState(StatesGroup):
     waiting_for_specialization = State()
     waiting_for_course = State()
-

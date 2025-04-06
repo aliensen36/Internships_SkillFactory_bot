@@ -5,6 +5,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
 from app.fsm_states import ChangeCourseState
 from app.keyboards.inline import *
 from app.keyboards.reply import kb_profile, kb_main

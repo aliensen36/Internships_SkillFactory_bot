@@ -18,7 +18,7 @@ from app.handlers.admin_project import admin_project_router
 from app.handlers.common import common_router
 from app.handlers.projects import projects_router
 from app.handlers.admin_specialization import admin_specialization_router
-from app.handlers.admin_spec_course import admin_spec_course_router
+from app.handlers.admin_course import admin_course_router
 from app.handlers.admin_broadcast import admin_broadcast_router
 
 
@@ -40,7 +40,7 @@ dp.include_router(projects_router)
 dp.include_router(admin_router)
 dp.include_router(admin_project_router)
 dp.include_router(admin_specialization_router)
-dp.include_router(admin_spec_course_router)
+dp.include_router(admin_course_router)
 dp.include_router(admin_broadcast_router)
 
 

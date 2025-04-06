@@ -252,16 +252,21 @@ async def change_courses_keyboard(session: AsyncSession,
 # ------------------------------- Административный раздел -----------------------------
 # =====================================================================================
 
-
+# Главное меню админа
 async def admin_main_menu():
     builder = InlineKeyboardBuilder()
 
     buttons = [
-        InlineKeyboardButton(text="Проекты", callback_data="admin_projects"),
-        InlineKeyboardButton(text="Специализации", callback_data="admin_specializations"),
-        InlineKeyboardButton(text="Курсы", callback_data="admin_courses"),
-        InlineKeyboardButton(text="Рассылка", callback_data="admin_mailing"),
-        InlineKeyboardButton(text="Статистика", callback_data="admin_stats")
+        InlineKeyboardButton(text="Проекты",
+                             callback_data="admin_projects"),
+        InlineKeyboardButton(text="Специализации",
+                             callback_data="admin_specializations"),
+        InlineKeyboardButton(text="Курсы",
+                             callback_data="admin_courses"),
+        InlineKeyboardButton(text="Рассылка",
+                             callback_data="admin_mailing"),
+        InlineKeyboardButton(text="Статистика",
+                             callback_data="admin_stats")
     ]
 
     builder.add(*buttons)
@@ -338,11 +343,16 @@ async def admin_specializations_menu():
     builder = InlineKeyboardBuilder()
 
     buttons = [
-        InlineKeyboardButton(text="Список", callback_data="specializations:list"),
-        InlineKeyboardButton(text="Добавить", callback_data="specializations:add"),
-        InlineKeyboardButton(text="Изменить", callback_data="specializations:edit"),
-        InlineKeyboardButton(text="Удалить", callback_data="specializations:delete"),
-        InlineKeyboardButton(text="Назад", callback_data="specializations:admin_main_menu")
+        InlineKeyboardButton(text="Список",
+                             callback_data="specializations:list"),
+        InlineKeyboardButton(text="Добавить",
+                             callback_data="specializations:add"),
+        InlineKeyboardButton(text="Изменить",
+                             callback_data="specializations:edit"),
+        InlineKeyboardButton(text="Удалить",
+                             callback_data="specializations:delete"),
+        InlineKeyboardButton(text="Назад",
+                             callback_data="specializations:admin_main_menu")
     ]
 
     builder.add(*buttons)
@@ -356,8 +366,10 @@ async def confirm_cancel_add_specializations():
     builder = InlineKeyboardBuilder()
 
     buttons = [
-        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_add_specialization"),
-        InlineKeyboardButton(text="Отменить", callback_data="cancel_add_specialization")
+        InlineKeyboardButton(text="Подтвердить",
+                             callback_data="confirm_add_specialization"),
+        InlineKeyboardButton(text="Отменить",
+                             callback_data="cancel_add_specialization")
     ]
 
     builder.add(*buttons)
@@ -371,8 +383,10 @@ async def confirm_cancel_edit_specializations():
     builder = InlineKeyboardBuilder()
 
     buttons = [
-        InlineKeyboardButton(text="Подтвердить", callback_data="confirm_edit_specialization"),
-        InlineKeyboardButton(text="Отменить", callback_data="cancel_edit_specialization")
+        InlineKeyboardButton(text="Подтвердить",
+                             callback_data="confirm_edit_specialization"),
+        InlineKeyboardButton(text="Отменить",
+                             callback_data="cancel_edit_specialization")
     ]
 
     builder.add(*buttons)
@@ -390,6 +404,81 @@ async def confirm_delete_specializations():
                              callback_data="delete_specializations:cancel")
     )
     return builder.as_markup()
+
+
+
+
+# --------------------------------------- Курсы ---------------------------------------
+
+
+
+# Главное меню управления курсами
+async def admin_courses_menu():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Список",
+                             callback_data="courses:list"),
+        InlineKeyboardButton(text="Добавить",
+                             callback_data="courses:add"),
+        InlineKeyboardButton(text="Изменить",
+                             callback_data="courses:edit"),
+        InlineKeyboardButton(text="Удалить",
+                             callback_data="courses:delete"),
+        InlineKeyboardButton(text="Назад",
+                             callback_data="courses:admin_main_menu")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2, 2, 1)
+
+    return builder.as_markup()
+
+
+# Подтверждение/отмена добавления курса
+async def confirm_cancel_add_courses():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Подтвердить",
+                             callback_data="confirm_add_course"),
+        InlineKeyboardButton(text="Отменить",
+                             callback_data="cancel_add_course")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2)
+
+    return builder.as_markup()
+
+
+# Подтверждение/отмена изменения курса
+async def confirm_cancel_edit_courses():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(text="Подтвердить",
+                             callback_data="confirm_edit_course"),
+        InlineKeyboardButton(text="Отменить",
+                             callback_data="cancel_edit_course")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(2)
+
+    return builder.as_markup()
+
+# Подтверждение/отмена удаления курса
+async def confirm_delete_courses():
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        InlineKeyboardButton(text="Да, удалить",
+                             callback_data="delete_сourses:confirm"),
+        InlineKeyboardButton(text="Нет, отменить",
+                             callback_data="delete_сourses:cancel")
+    )
+    return builder.as_markup()
+
 
 
 # ======================================================================================

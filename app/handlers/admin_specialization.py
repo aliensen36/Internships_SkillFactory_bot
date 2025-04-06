@@ -27,7 +27,7 @@ async def specializations(callback: CallbackQuery):
 
         # Отправляем новое меню специализаций
         await callback.message.answer(
-            text="<b>🏗️ Управление специализациями</b>\n\nВыберите действие:",
+            text="<b>🏗️ Управление специализациями</b>\n\nВыбери действие:",
             reply_markup=await admin_specializations_menu(),
             parse_mode="HTML"
         )
@@ -77,7 +77,7 @@ async def view_specializations(callback: CallbackQuery,
 async def add_specialization_start(callback: CallbackQuery,
                                    state: FSMContext):
     await state.set_state(SpecializationAddState.waiting_for_name)
-    await callback.message.answer("Введите название специализации:")
+    await callback.message.answer("Введи название специализации:")
     await callback.answer()
 
 

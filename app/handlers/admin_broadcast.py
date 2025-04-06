@@ -93,9 +93,10 @@ MEDIA_DIR = 'media/images'
 Path(MEDIA_DIR).mkdir(parents=True, exist_ok=True)  # Создаем папку, если ее нет
 
 
-@admin_broadcast_router.message(F.text == "📢 Рассылка")
-async def start_broadcast(message: Message, state: FSMContext):
-    sent_msg = await message.answer(
+@admin_broadcast_router.callback_query(F.data == "admin_mailing")
+async def start_broadcast(callback: CallbackQuery,
+                          state: FSMContext):
+    sent_msg = await callback.message.answer(
         "<b>📨 Введите текст сообщения</b>",
         parse_mode="HTML"
     )

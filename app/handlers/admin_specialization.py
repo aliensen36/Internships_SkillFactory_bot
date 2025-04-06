@@ -96,7 +96,7 @@ async def add_specialization_name(message: Message,
     # Если специализация с таким названием уже существует
         await message.answer(
             f"⚠️ Специализация с названием '{specialization_name}' уже существует.\n"
-            "Пожалуйста, введите другое название:"
+            "Пожалуйста, введи другое название:"
         )
         # Остаемся в том же состоянии для повторного ввода
         return
@@ -107,7 +107,7 @@ async def add_specialization_name(message: Message,
     # Формируем сообщение с предпросмотром данных
     preview_message = (
         f"📋 Новая специализация: <b>{data['name']}</b>\n\n"
-        "Подтвердите добавление или отмените:"
+        "Подтверди или отмени:"
     )
 
     await message.answer(preview_message,
@@ -119,7 +119,7 @@ async def add_specialization_name(message: Message,
 @admin_specialization_router.callback_query(
     SpecializationAddState.waiting_for_confirmation,
     F.data == "confirm_add_specialization")
-async def confirm_ass_specialization(callback: CallbackQuery,
+async def confirm_add_specialization(callback: CallbackQuery,
                                      state: FSMContext,
                                      session: AsyncSession):
     data = await state.get_data()
@@ -325,13 +325,14 @@ async def delete_specialization_start(callback: CallbackQuery,
             parse_mode="HTML"
         )
         await callback.answer()
+        await state.set_state(SpecializationDeleteState.waiting_for_delete)
 
     except Exception as e:
         await callback.message.answer("⚠️ Произошла ошибка при загрузке специализаций")
         logging.error(f"Error in view_specializations: {e}")
         await callback.answer()
 
-    await state.set_state(SpecializationDeleteState.waiting_for_delete)
+
 
 
 @admin_specialization_router.callback_query(

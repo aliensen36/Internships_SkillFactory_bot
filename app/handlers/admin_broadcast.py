@@ -15,7 +15,7 @@ from sqlalchemy import select, func
 import time
 from collections import defaultdict
 from app.fsm_states import BroadcastState
-from app.keyboards.inline import projects_keyboard, bc_courses_keyboard, admin_main_menu
+from app.keyboards.inline import projects_keyboard, bc_courses_keyboard, admin_main_menu, add_back_button
 from app.keyboards.reply import kb_admin_main
 from database.models import User, Specialization, Course, Broadcast, Project, BroadcastCourseAssociation
 import logging
@@ -95,12 +95,15 @@ Path(MEDIA_DIR).mkdir(parents=True, exist_ok=True)  # Создаем папку,
 @admin_broadcast_router.callback_query(F.data == "admin_mailing")
 async def start_broadcast(callback: CallbackQuery,
                           state: FSMContext):
+    builder = InlineKeyboardBuilder()
+    await add_back_button(builder, "menu")
+
     await callback.message.answer(
         "<b>📨 Введи текст сообщения</b>",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
     )
     await callback.answer()
-    # await state.update_data(sent_msg=sent_msg)
     await state.set_state(BroadcastState.waiting_for_text)
 
 
@@ -112,6 +115,7 @@ async def get_broadcast_text(message: Message, state: FSMContext):
 
     builder = InlineKeyboardBuilder()
     builder.button(text="Без изображения", callback_data="skip_photo")
+    await add_back_button(builder, "waiting_for_text")
 
 
     await message.answer("<b>📷 Отправь изображение</b>",
@@ -132,9 +136,13 @@ async def skip_photo_handler(callback: CallbackQuery, state: FSMContext, session
 
     # Переход к выбору проекта
     keyboard = await projects_keyboard(session)
+    builder = InlineKeyboardBuilder()
+    builder.attach(keyboard)
+    await add_back_button(builder, "waiting_for_photo")
+
     await callback.message.answer("<b>Укажи проект для рассылки</b>",
-                                 parse_mode="HTML",
-                                  reply_markup=keyboard.as_markup(resize_keyboard=True))
+                                  parse_mode="HTML",
+                                  reply_markup=builder.as_markup(resize_keyboard=True))
     await state.set_state(BroadcastState.waiting_for_project)
 
 
@@ -160,16 +168,27 @@ async def get_broadcast_photo(message: Message, state: FSMContext,
         # Сохраняем файл
         await bot.download_file(file_path, photo_path)
     else:
-        await message.answer("⚠ Пожалуйста, отправьь фото или нажми 'Без изображения'.")
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Без изображения", callback_data="skip_photo")
+        await add_back_button(builder, "waiting_for_text")
+
+        await message.answer("⚠ Пожалуйста, отправь фото или нажми 'Без изображения'.",
+                             reply_markup=builder.as_markup())
         return
+
 
     await state.update_data(photo=photo_path)  # Сохраняем путь к файлу
 
     # Переход к выбору проекта
     keyboard = await projects_keyboard(session)
+    builder = InlineKeyboardBuilder()
+    builder.attach(keyboard)
+    await add_back_button(builder, "waiting_for_photo")
+
     await message.answer("<b>Укажи проект для рассылки</b>",
                          parse_mode="HTML",
-                         reply_markup=keyboard.as_markup(resize_keyboard=True))
+                         reply_markup=builder.as_markup(resize_keyboard=True))
+
     await state.set_state(BroadcastState.waiting_for_project)
 
 
@@ -592,10 +611,6 @@ async def confirm_broadcast(callback: CallbackQuery,
         await state.clear()
 
 
-
-
-
-
 @admin_broadcast_router.callback_query(
     BroadcastState.confirmation,
     F.data == "cancel_broadcast"
@@ -606,3 +621,61 @@ async def cancel_broadcast_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
 
+
+# Универсальный обработчик кнопки Назад
+@admin_broadcast_router.callback_query(F.data.startswith("back_"))
+async def handle_back_button(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    back_state = callback.data.replace("back_", "")
+
+    if back_state == "menu":
+        await state.clear()
+        await callback.message.edit_text(
+            "Главное админ-меню",
+            reply_markup=await admin_main_menu()
+        )
+
+    elif back_state == "waiting_for_text":
+        await state.get_data()
+
+        builder = InlineKeyboardBuilder()
+        await add_back_button(builder, "menu")
+
+        await callback.message.edit_text(
+            "<b>Заново введи текст сообщения</b>",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+        await state.set_state(BroadcastState.waiting_for_text)
+
+    elif back_state == "waiting_for_photo":
+        await state.get_data()
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Без изображения", callback_data="skip_photo")
+        await add_back_button(builder, "waiting_for_text")
+
+        await callback.message.edit_text(
+            "<b>Заново отправь изображение</b>",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+        await state.set_state(BroadcastState.waiting_for_photo)
+
+    elif back_state == "waiting_for_project":
+        data = await state.get_data()
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Без изображения", callback_data="skip_photo")
+        await add_back_button(builder, "waiting_for_text")
+
+        await callback.message.answer("<b>📷 Отправь изображение</b>",
+                                    parse_mode="HTML",
+                                    reply_markup=builder.as_markup())
+        await state.set_state(BroadcastState.waiting_for_photo)
+
+    elif back_state == "waiting_for_courses":
+        keyboard = await projects_keyboard(session)
+        await callback.message.answer("<b>Укажи проект для рассылки</b>",
+                                    parse_mode="HTML",
+                                    reply_markup=keyboard.as_markup(resize_keyboard=True))
+        await state.set_state(BroadcastState.waiting_for_project)
+
+    await callback.answer()

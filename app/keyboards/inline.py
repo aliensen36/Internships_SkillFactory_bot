@@ -57,7 +57,7 @@ async def courses_keyboard(session: AsyncSession, specialization_id: int,
     if page > 0:
         navigation_buttons.append(
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text="Назад",
                 callback_data=f"page_{specialization_id}_{page - 1}")
         )
 
@@ -72,7 +72,7 @@ async def courses_keyboard(session: AsyncSession, specialization_id: int,
     if next_page_result.scalars().first():
         navigation_buttons.append(
             InlineKeyboardButton(
-                text="➡️ Вперед",
+                text="Вперед",
                 callback_data=f"page_{specialization_id}_{page + 1}")
         )
 
@@ -394,6 +394,7 @@ async def confirm_cancel_edit_specializations():
 
     return builder.as_markup()
 
+
 # Подтверждение/отмена удаления специализаций
 async def confirm_delete_specializations():
     builder = InlineKeyboardBuilder()
@@ -481,26 +482,25 @@ async def confirm_delete_courses():
 
 
 
-# ======================================================================================
+
 # -------------------------------------- Рассылка -------------------------------------
-# ======================================================================================
 
 
 
 # Проекты
-async def bc_projects_keyboard(session: AsyncSession):
-    builder = InlineKeyboardBuilder()
-    result = await session.execute(select(Project))
-    projects = result.scalars().all()
-
-    for project in projects:
-        builder.button(
-            text=project.title,
-            callback_data=f"project_{project.id}"
-        )
-
-    builder.adjust(2)
-    return builder
+# async def bc_projects_keyboard(session: AsyncSession):
+#     builder = InlineKeyboardBuilder()
+#     result = await session.execute(select(Project))
+#     projects = result.scalars().all()
+#
+#     for project in projects:
+#         builder.button(
+#             text=project.title,
+#             callback_data=f"project_{project.id}"
+#         )
+#
+#     builder.adjust(1)
+#     return builder
 
 
 # Курсы
@@ -508,7 +508,7 @@ async def bc_courses_keyboard(
         session: AsyncSession,
         search_query: str = None,
         page: int = 0,
-        per_page: int = 8,
+        per_page: int = 6,
         selected_ids: list[int] = None
 ):
     builder = InlineKeyboardBuilder()
@@ -538,7 +538,7 @@ async def bc_courses_keyboard(
             callback_data=f"bccourse_{course.id}"
         )
 
-    builder.adjust(2)
+    builder.adjust(1)
 
     # Навигация
     nav_buttons = []
@@ -576,21 +576,11 @@ async def bc_courses_keyboard(
     return builder
 
 
-# Клавиатура подтверждения
-builder = InlineKeyboardBuilder()
-builder.button(text="✅ Подтвердить", callback_data="confirm_broadcast")
-builder.button(text="✏️ Изменить текст", callback_data="edit_text")
-builder.button(text="🖼️ Изменить фото", callback_data="edit_photo")
-builder.button(text="📌 Изменить проект", callback_data="edit_project")
-builder.button(text="🎯 Изменить курсы", callback_data="edit_courses")
-builder.button(text="❌ Отменить", callback_data="cancel_broadcast")
-builder.adjust(2, 2, 2)
-# ======================================================================================
+# Универсальная кнопка Назад
+async def add_back_button(builder: InlineKeyboardBuilder, back_state: str = "menu"):
+    builder.button(text="Назад", callback_data=f"back_{back_state}")
+    builder.adjust(1)
 
-
-
-# ------------------------------- Админ-панель ------------------------------------
-# ======================================================================================
 
 # Проекты
 async def projects_keyboard(session: AsyncSession):
@@ -605,7 +595,7 @@ async def projects_keyboard(session: AsyncSession):
             callback_data=f"project_{project.id}"
         )
 
-    builder.adjust(2)
+    builder.adjust(1)
     return builder
 
 

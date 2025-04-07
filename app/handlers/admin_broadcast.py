@@ -15,7 +15,7 @@ from sqlalchemy import select, func
 import time
 from collections import defaultdict
 from app.fsm_states import BroadcastState
-from app.keyboards.inline import projects_keyboard, bc_courses_keyboard
+from app.keyboards.inline import projects_keyboard, bc_courses_keyboard, admin_main_menu
 from app.keyboards.reply import kb_admin_main
 from database.models import User, Specialization, Course, Broadcast, Project, BroadcastCourseAssociation
 import logging
@@ -62,7 +62,6 @@ async def send_photo_with_caption(
                     reply_markup=reply_markup
                 )
         else:
-            # Предполагаем, что это file_id
             if len(text) <= 1024:
                 await bot.send_photo(
                     chat_id=recipient_id,
@@ -96,11 +95,12 @@ Path(MEDIA_DIR).mkdir(parents=True, exist_ok=True)  # Создаем папку,
 @admin_broadcast_router.callback_query(F.data == "admin_mailing")
 async def start_broadcast(callback: CallbackQuery,
                           state: FSMContext):
-    sent_msg = await callback.message.answer(
-        "<b>📨 Введите текст сообщения</b>",
+    await callback.message.answer(
+        "<b>📨 Введи текст сообщения</b>",
         parse_mode="HTML"
     )
-    await state.update_data(instruction_msg_id=sent_msg.message_id)
+    await callback.answer()
+    # await state.update_data(sent_msg=sent_msg)
     await state.set_state(BroadcastState.waiting_for_text)
 
 
@@ -111,10 +111,10 @@ async def get_broadcast_text(message: Message, state: FSMContext):
     await state.update_data(text=message.text)
 
     builder = InlineKeyboardBuilder()
-    builder.button(text="🚫 Без изображения", callback_data="skip_photo")
+    builder.button(text="Без изображения", callback_data="skip_photo")
 
 
-    await message.answer("<b>📷 Отправьте изображение</b>",
+    await message.answer("<b>📷 Отправь изображение</b>",
                          parse_mode="HTML",
                          reply_markup=builder.as_markup()
                          )
@@ -132,7 +132,7 @@ async def skip_photo_handler(callback: CallbackQuery, state: FSMContext, session
 
     # Переход к выбору проекта
     keyboard = await projects_keyboard(session)
-    await callback.message.answer("<b>📌 Укажите проект для рассылки</b>",
+    await callback.message.answer("<b>Укажи проект для рассылки</b>",
                                  parse_mode="HTML",
                                   reply_markup=keyboard.as_markup(resize_keyboard=True))
     await state.set_state(BroadcastState.waiting_for_project)
@@ -160,14 +160,14 @@ async def get_broadcast_photo(message: Message, state: FSMContext,
         # Сохраняем файл
         await bot.download_file(file_path, photo_path)
     else:
-        await message.answer("⚠ Пожалуйста, отправьте фото или нажмите 'Без изображения'.")
+        await message.answer("⚠ Пожалуйста, отправьь фото или нажми 'Без изображения'.")
         return
 
     await state.update_data(photo=photo_path)  # Сохраняем путь к файлу
 
     # Переход к выбору проекта
     keyboard = await projects_keyboard(session)
-    await message.answer("<b>📌 Укажите проект для рассылки</b>",
+    await message.answer("<b>Укажи проект для рассылки</b>",
                          parse_mode="HTML",
                          reply_markup=keyboard.as_markup(resize_keyboard=True))
     await state.set_state(BroadcastState.waiting_for_project)
@@ -191,7 +191,7 @@ async def select_project(callback: CallbackQuery, state: FSMContext,
     project = result.scalar_one_or_none()
 
     if not project:
-        await callback.answer("⚠ Проект не найден. Выберите из списка:",
+        await callback.answer("⚠ Проект не найден. Выбери из списка:",
                               show_alert=True)
         return
 
@@ -205,7 +205,7 @@ async def select_project(callback: CallbackQuery, state: FSMContext,
     await callback.answer()
     await callback.message.answer(
         f"Проект: <b>{project.title}</b>\n\n"
-        f"Выберите курсы для рассылки:",
+        f"Выбери курсы для рассылки:",
         parse_mode="HTML",
         reply_markup=courses_kb.as_markup()
     )
@@ -314,7 +314,7 @@ async def courses_page_handler(callback: CallbackQuery, state: FSMContext,
 )
 async def search_courses_handler(callback: CallbackQuery, state: FSMContext):
     try:
-        await callback.message.answer("🔍 Введите название курса для поиска:")
+        await callback.message.answer("🔍 Введи название курса для поиска:")
         await state.set_state(BroadcastState.waiting_for_course_search)
         await callback.answer()
     except Exception as e:
@@ -369,7 +369,7 @@ async def finish_courses_selection(callback: CallbackQuery,
     selected_courses = data.get("selected_courses", [])
 
     if not selected_courses:
-        await callback.answer("❌ Вы не выбрали ни одного курса!",
+        await callback.answer("❌ Не выбран ни один курс!",
                               show_alert=True)
         return
 
@@ -420,7 +420,7 @@ async def finish_courses_selection(callback: CallbackQuery,
             f"📌 <b>Проект:</b> {project.title}\n\n"
             f"🎯 <b>Курсы и получатели:</b>\n" + "\n".join(course_stats) + "\n\n"
             f"👥 <b>Всего получателей:</b> {total_recipients}\n\n"
-            "Подтвердите отправку или измените данные:"
+            "Подтверди отправку или измени данные:"
     )
 
     # Клавиатура подтверждения
@@ -472,7 +472,7 @@ async def confirm_broadcast(callback: CallbackQuery,
         selected_courses = data.get("selected_courses", [])
 
         if not selected_courses:
-            await callback.answer("❌ Вы не выбрали ни одного курса!", show_alert=True)
+            await callback.answer("❌ Не выбран ни один курс!", show_alert=True)
             return
 
         # Получаем только необходимые данные пользователей
@@ -505,12 +505,13 @@ async def confirm_broadcast(callback: CallbackQuery,
 
         total_users = len(users)
         if not total_users:
-            await callback.answer("❌ Нет пользователей на выбранных курсах!", show_alert=True)
+            await callback.answer("❌ Нет получателей у выбранных курсов!",
+                                  show_alert=True)
             return
 
         # Уведомление о начале рассылки
         progress_msg = await callback.message.answer(
-            f"⏳ Рассылка для {total_users} пользователей...",
+            f"Рассылка для {total_users} пользователей...",
             parse_mode="HTML"
         )
 
@@ -576,7 +577,8 @@ async def confirm_broadcast(callback: CallbackQuery,
 
         await callback.message.answer(
             "\n".join(report_lines),
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=await admin_main_menu()
         )
         await callback.answer()
 
@@ -599,7 +601,8 @@ async def confirm_broadcast(callback: CallbackQuery,
     F.data == "cancel_broadcast"
 )
 async def cancel_broadcast_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("❌ Рассылка отменена")
+    await callback.message.edit_text("❌ Рассылка отменена",
+                                     reply_markup=await admin_main_menu())
     await state.clear()
     await callback.answer()
 

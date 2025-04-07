@@ -292,19 +292,19 @@ async def send_broadcast_with_pagination(
         builder = InlineKeyboardBuilder()
         if index > 0:
             builder.button(
-                text="⬅️ Предыдущая",
+                text="Предыдущая",
                 callback_data=f"prev_broadcast_{project_id}_{index}_{user_course_id}"
             )
         if index < total - 1:
             builder.button(
-                text="Следующая ➡️",
+                text="Следующая",
                 callback_data=f"next_broadcast_{project_id}_{index}_{user_course_id}"
             )
         builder.button(
-            text="◀️ Назад к проекту",
+            text="Назад к проекту",
             callback_data=f"view_project_{project_id}"
         )
-        builder.adjust(2, 1)
+        builder.adjust(1)
         markup = builder.as_markup()
 
         # Список для хранения ID ВСЕХ отправленных сообщений

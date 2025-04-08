@@ -85,7 +85,7 @@ async def on_startup(bot):
     if run_param:
         await drop_db()
     await create_db()
-    logging.info("Бот успешно запущен. https://t.me/Internships_SkillFactory_bot")
+    logging.info("Бот успешно запущен. https://t.me/Factory_Info_bot")
 
 async def main():
     dp.startup.register(on_startup)

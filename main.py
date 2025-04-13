@@ -23,6 +23,7 @@ from app.handlers.projects import projects_router
 from app.handlers.admin_specialization import admin_specialization_router
 from app.handlers.admin_course import admin_course_router
 from app.handlers.admin_broadcast import admin_broadcast_router
+from app.handlers.admin_stats import admin_stats_router
 
 
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +46,7 @@ dp.include_router(admin_project_router)
 dp.include_router(admin_specialization_router)
 dp.include_router(admin_course_router)
 dp.include_router(admin_broadcast_router)
+dp.include_router(admin_stats_router)
 
 
 CHAT_ID: Optional[int] = None

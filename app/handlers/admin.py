@@ -34,62 +34,6 @@ async def confirmation(message: Message, bot: Bot):
     )
 
 
-@admin_router.callback_query(F.data == 'admin_stats')
-async def show_statistics(callback: CallbackQuery,
-                          session: AsyncSession):
-    total_users = await session.scalar(select(func.count()).select_from(User))
-    total_specializations = await session.scalar(select(func.count()).select_from(Specialization))
-    total_courses = await session.scalar(select(func.count()).select_from(Course))
-
-    # Пользователи без выбранного курса
-    users_without_course = await session.scalar(
-        select(func.count()).where(User.course_id.is_(None))
-    )
-
-    # Статистика по курсам
-    course_stats_query = (
-        select(
-            Course.name.label("course_name"),
-            Specialization.name.label("specialization_name"),
-            func.count(User.id).label("user_count")
-        )
-        .join(User.course)
-        .join(Course.specialization)
-        .group_by(Course.id, Specialization.id)
-        .order_by(Specialization.name, Course.name)
-    )
-
-    course_stats = await session.execute(course_stats_query)
-    course_stats_rows = course_stats.all()
-
-    # Формируем текст сообщения
-    text = (
-        "<b>📊 Статистика чат-бота:</b>\n\n"
-        f"Всего пользователей: <b>{total_users}</b>\n"
-        f"   - из них без выбранного курса: <b>{users_without_course}</b>\n\n"
-        f"Всего специализаций: <b>{total_specializations}</b>\n"
-        f"Всего курсов: <b>{total_courses}</b>\n\n"
-        "<b>Выбор курсов пользователями:</b>\n"
-    )
-
-    # Добавляем статистику по курсам
-    current_specialization = None
-    for row in course_stats_rows:
-        course_name, specialization_name, user_count = row
-
-        if specialization_name != current_specialization:
-            text += f"\n<b>{specialization_name}:</b>\n"
-            current_specialization = specialization_name
-
-        text += f"   - {course_name} — <b>{user_count}</b>\n"
-
-    await callback.message.answer(
-        text,
-        parse_mode="HTML",
-        reply_markup=await admin_main_menu()
-    )
-    await callback.answer()
-
 
 # Обработчик кнопки выхода
 @admin_router.message(F.text == "Выйти из админ-панели")
@@ -99,3 +43,6 @@ async def exit_admin_panel(message: Message,
         "Выход из админ-панели.",
         reply_markup=kb_main)
     await state.clear()
+
+
+

@@ -21,7 +21,7 @@ from aiogram.types import BufferedInputFile
 
 from app.keyboards.inline import admin_main_menu
 from app.keyboards.reply import kb_admin_main, kb_main
-from database.models import User, Specialization, Course, Broadcast, BroadcastCourseAssociation
+from database.models import User, Specialization, Course, Broadcast, BroadcastCourseAssociation, Project
 
 admin_stats_router = Router()
 admin_stats_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -344,37 +344,36 @@ async def export_users_to_excel(callback: CallbackQuery, session: AsyncSession):
 
 
 
+class ExportMailingParams(StatesGroup):
+    DATE_FROM = State()
+    DATE_TO = State()
+    COURSE = State()
+    PROJECT = State()
+
+
 
 # Обработчик статистики по рассылкам
 @admin_stats_router.callback_query(F.data == 'stats_mailings')
-async def show_mailings_statistics(callback: CallbackQuery,
-                                   session: AsyncSession):
+async def show_mailings_statistics(callback: CallbackQuery, session: AsyncSession):
     # Получаем общую статистику по рассылкам
-    total_mailings = await session.scalar(
-        select(func.count()).select_from(Broadcast)
-    )
+    total_mailings = await session.scalar(select(func.count()).select_from(Broadcast))
 
     # Получаем детализированную информацию о последних 5 рассылках
-    latest_mailings_query = (
-        select(Broadcast)
-        .order_by(Broadcast.created.desc())
-        .limit(5)
-    )
+    latest_mailings_query = select(Broadcast).order_by(Broadcast.created.desc()).limit(5)
     latest_mailings = await session.scalars(latest_mailings_query)
 
     # Формируем текст сообщения
     text = [
         "<b>📊 Статистика рассылок</b>\n\n",
         f"• Всего рассылок: <b>{total_mailings}</b>\n\n",
-        "<b>Последние рассылки:</b>\n"
+        "<b>Последние 5 рассылок:</b>\n"
     ]
 
     for mailing in latest_mailings:
         # Получаем названия курсов для этой рассылки
         courses_query = (
             select(Course.name)
-            .join(BroadcastCourseAssociation,
-                  BroadcastCourseAssociation.course_id == Course.id)
+            .join(BroadcastCourseAssociation, BroadcastCourseAssociation.course_id == Course.id)
             .where(BroadcastCourseAssociation.broadcast_id == mailing.id)
         )
         courses = await session.scalars(courses_query)
@@ -383,8 +382,7 @@ async def show_mailings_statistics(callback: CallbackQuery,
         # Получаем количество получателей
         recipients_count = await session.scalar(
             select(func.count(User.id))
-            .join(BroadcastCourseAssociation,
-                  User.course_id == BroadcastCourseAssociation.course_id)
+            .join(BroadcastCourseAssociation, User.course_id == BroadcastCourseAssociation.course_id)
             .where(BroadcastCourseAssociation.broadcast_id == mailing.id)
         )
 
@@ -415,15 +413,268 @@ async def show_mailings_statistics(callback: CallbackQuery,
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад",
-            callback_data="admin_stats"
-        )
+            text="Выгрузить в Excel",
+            callback_data="export_mailings")
     )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="admin_stats")
+    )
+
 
     await callback.message.edit_text(
         "".join(text),
         parse_mode="HTML",
         reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+
+@admin_stats_router.callback_query(F.data == 'export_mailings')
+async def start_export_mailings(callback: CallbackQuery, state: FSMContext):
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="По дате",
+            callback_data="set_date_range"),
+        InlineKeyboardButton(
+            text="По курсу",
+            callback_data="set_course")
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="По проекту",
+            callback_data="set_project"),
+        InlineKeyboardButton(
+            text="Все данные",
+            callback_data="export_all_mailings")
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="stats_mailings")
+    )
+
+    await callback.message.edit_text(
+        "Выберите параметры для выгрузки:",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+
+@admin_stats_router.callback_query(F.data == 'export_all_mailings')
+async def export_all_mailings(callback: CallbackQuery, session: AsyncSession):
+    await generate_mailings_report(callback, session)
+    await callback.answer()
+
+
+async def generate_mailings_report(
+    callback: CallbackQuery | Message,
+    session: AsyncSession,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    course_id: int | None = None,
+    project_id: int | None = None
+):
+    try:
+        # Формируем базовый запрос с проектами
+        query = (
+            select(
+                Broadcast.created.label("date"),
+                Broadcast.text.label("message"),
+                Course.name.label("course"),
+                Project.title.label("project"),
+                func.count(User.id).label("recipients")
+            )
+            .join(BroadcastCourseAssociation, Broadcast.id == BroadcastCourseAssociation.broadcast_id)
+            .join(Course, BroadcastCourseAssociation.course_id == Course.id)
+            .join(User, User.course_id == Course.id)
+            .outerjoin(Project, Broadcast.project_id == Project.id)  # Используем outerjoin для проектов
+            .group_by(Broadcast.id, Course.id, Project.id)
+        )
+
+        # Применяем фильтры
+        if date_from and date_to:
+            query = query.where(Broadcast.created.between(date_from, date_to))
+        elif date_from:
+            query = query.where(Broadcast.created >= date_from)
+        elif date_to:
+            query = query.where(Broadcast.created <= date_to)
+
+        if course_id:
+            query = query.where(Course.id == course_id)
+
+        if project_id:
+            query = query.where(Project.id == project_id)
+
+        # Выполняем запрос
+        result = await session.execute(query)
+        mailings_data = result.all()
+
+        if not mailings_data:
+            error_msg = "Нет данных для выбранных параметров фильтрации"
+            if isinstance(callback, CallbackQuery):
+                await callback.message.answer(error_msg)
+            else:
+                await callback.answer(error_msg)
+            return
+
+        # Создаем DataFrame
+        df = pd.DataFrame([{
+            "Дата": m.date.strftime("%d.%m.%Y %H:%M") if m.date else "",
+            "Проект": m.project or "Не указан",
+            "Курс": m.course,
+            "Получателей": m.recipients,
+            "Текст рассылки": m.message
+        } for m in mailings_data])
+
+        # Создаем Excel файл
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Рассылки')
+            worksheet = writer.sheets['Рассылки']
+
+            # Настраиваем ширину колонок
+            worksheet.set_column('A:A', 20)  # Дата
+            worksheet.set_column('B:B', 25)  # Проект
+            worksheet.set_column('C:C', 25)  # Курс
+            worksheet.set_column('D:D', 15)  # Получателей
+            worksheet.set_column('E:E', 50)  # Текст рассылки
+
+        # Подготавливаем файл для отправки
+        output.seek(0)
+        excel_file = BufferedInputFile(output.read(), filename='mailings_report.xlsx')
+
+        # Отправляем файл
+        if isinstance(callback, CallbackQuery):
+            await callback.message.answer_document(
+                document=excel_file,
+                caption="📊 Отчет по рассылкам"
+            )
+        else:
+            await callback.answer_document(
+                document=excel_file,
+                caption="📊 Отчет по рассылкам"
+            )
+
+    except Exception as e:
+        await callback.answer()
+
+
+@admin_stats_router.callback_query(F.data == 'set_date_range')
+async def set_date_range(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Введите начальную дату в формате ДД.ММ.ГГГГ:")
+    await state.set_state(ExportMailingParams.DATE_FROM)
+    await callback.answer()
+
+
+@admin_stats_router.message(ExportMailingParams.DATE_FROM)
+async def process_date_from(message: Message, state: FSMContext):
+    try:
+        date_from = datetime.strptime(message.text, "%d.%m.%Y")
+        await state.update_data(date_from=date_from)
+        await message.answer("Введите конечную дату в формате ДД.ММ.ГГГГ (или 'нет' для одной даты):")
+        await state.set_state(ExportMailingParams.DATE_TO)
+    except ValueError:
+        await message.answer("Неверный формат даты. Попробуйте снова в формате ДД.ММ.ГГГГ")
+
+
+@admin_stats_router.message(ExportMailingParams.DATE_TO)
+async def process_date_to(message: Message, state: FSMContext, session: AsyncSession):
+    data = await state.get_data()
+    date_from = data.get('date_from')
+
+    if message.text.lower() != 'нет':
+        try:
+            date_to = datetime.strptime(message.text, "%d.%m.%Y")
+        except ValueError:
+            await message.answer("Неверный формат даты. Попробуйте снова в формате ДД.ММ.ГГГГ")
+            return
+    else:
+        date_to = None
+
+    await state.clear()
+    await generate_mailings_report(
+        callback=message,
+        session=session,
+        date_from=date_from,
+        date_to=date_to
+    )
+
+
+@admin_stats_router.callback_query(F.data == 'set_course')
+async def set_course(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    # Получаем список всех курсов
+    courses = await session.execute(select(Course.id, Course.name).order_by(Course.name))
+
+    builder = InlineKeyboardBuilder()
+    for course in courses:
+        builder.row(
+            InlineKeyboardButton(
+                text=course.name,
+                callback_data=f"select_course_{course.id}"
+            )
+        )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="export_mailings"
+        )
+    )
+
+    await callback.message.edit_text(
+        "Выберите курс для фильтрации:",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+
+@admin_stats_router.callback_query(F.data.startswith('select_course_'))
+async def process_course_selection(callback: CallbackQuery, session: AsyncSession):
+    course_id = int(callback.data.split('_')[-1])
+    await generate_mailings_report(
+        callback=callback,
+        session=session,
+        course_id=course_id
+    )
+    await callback.answer()
+
+
+@admin_stats_router.callback_query(F.data == 'set_project')
+async def set_project(callback: CallbackQuery, session: AsyncSession):
+    # Получаем список всех проектов
+    projects = await session.execute(select(Project.id, Project.title).order_by(Project.title))
+
+    builder = InlineKeyboardBuilder()
+    for project in projects:
+        builder.row(
+            InlineKeyboardButton(
+                text=project.title,
+                callback_data=f"select_project_{project.id}"
+            )
+        )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="export_mailings"
+        )
+    )
+
+    await callback.message.edit_text(
+        "Выберите проект для фильтрации:",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer()
+
+
+@admin_stats_router.callback_query(F.data.startswith('select_project_'))
+async def process_project_selection(callback: CallbackQuery, session: AsyncSession):
+    project_id = int(callback.data.split('_')[-1])
+    await generate_mailings_report(
+        callback=callback,
+        session=session,
+        project_id=project_id
     )
     await callback.answer()
 

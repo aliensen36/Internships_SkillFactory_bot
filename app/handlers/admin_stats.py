@@ -354,14 +354,6 @@ async def show_mailings_statistics(callback: CallbackQuery,
         select(func.count()).select_from(Broadcast)
     )
 
-    sent_mailings = await session.scalar(
-        select(func.count()).where(Broadcast.is_sent == True)
-    )
-
-    pending_mailings = await session.scalar(
-        select(func.count()).where(Broadcast.is_sent == False)
-    )
-
     # Получаем детализированную информацию о последних 5 рассылках
     latest_mailings_query = (
         select(Broadcast)
@@ -398,13 +390,22 @@ async def show_mailings_statistics(callback: CallbackQuery,
 
         # Форматируем дату и текст
         date_str = mailing.created.strftime("%d.%m.%Y %H:%M") if mailing.created else "N/A"
-        # status = "✅ Отправлено" if mailing.is_sent else "🕒 В очереди"
-        short_text = (mailing.text[:25] + "...") if len(mailing.text) > 25 else mailing.text
+        short_text = (mailing.text[:125] + "...") if len(mailing.text) > 125 else mailing.text
+
+        # Форматируем список курсов с нумерацией
+        formatted_courses = ""
+        if course_names:
+            formatted_courses = "\n".join(
+                f"{i + 1}) {name}"
+                for i, name in enumerate(course_names)
+            )
+        else:
+            formatted_courses = "Нет курсов"
 
         text.append(
             f"\n<b>#{mailing.id}</b>\n"
             f"<b>{date_str}</b>\n"
-            f"Курсы: <b>{', '.join(course_names) or 'Нет курсов'}</b>\n"
+            f"Курсы:\n<b>{formatted_courses}</b>\n"
             f"Получателей: <b>{recipients_count}</b>\n"
             f"Текст: <i>{short_text}</i>\n"
             "────────────────"

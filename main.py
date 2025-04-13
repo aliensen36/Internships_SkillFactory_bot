@@ -77,7 +77,7 @@ async def on_startup(bot):
     """Действия при перезапуске бота"""
     if CHAT_ID is not None:
         await send_to_chat(text="🔄 Бот был перезапущен! Для входа в админ-панель "
-                                "введите команду /admin.")
+                                "введите команду /admin в этой группе, а затем в боте.")
     else:
         logging.warning("CHAT_ID не установлен. Уведомление о перезапуске не отправлено.")
 
@@ -85,7 +85,7 @@ async def on_startup(bot):
     if run_param:
         await drop_db()
     await create_db()
-    logging.info("Бот успешно запущен. https://t.me/Factory_Info_bot")
+    logging.info("Бот успешно запущен.")
 
 async def main():
     dp.startup.register(on_startup)

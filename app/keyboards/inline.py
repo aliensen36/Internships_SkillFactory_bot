@@ -57,7 +57,7 @@ async def courses_keyboard(session: AsyncSession, specialization_id: int,
     if page > 0:
         navigation_buttons.append(
             InlineKeyboardButton(
-                text="Назад",
+                text="⬅️ Назад",
                 callback_data=f"page_{specialization_id}_{page - 1}")
         )
 
@@ -72,7 +72,7 @@ async def courses_keyboard(session: AsyncSession, specialization_id: int,
     if next_page_result.scalars().first():
         navigation_buttons.append(
             InlineKeyboardButton(
-                text="Вперед",
+                text="➡️ Вперед",
                 callback_data=f"page_{specialization_id}_{page + 1}")
         )
 
@@ -122,7 +122,7 @@ async def view_project_kb(session: AsyncSession):
             callback_data=f"view_project_{project.id}"
         )
 
-    builder.button(text="Назад", callback_data="back_to_main_menu")
+    builder.button(text="⬅️ Назад", callback_data="back_to_main_menu")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -167,7 +167,7 @@ async def get_project_details_keyboard(project_id: int, session: AsyncSession):
 
     # Шестая кнопка - назад
     builder.button(
-        text="Назад",
+        text="⬅️ Назад",
         callback_data="back_to_projects_list"
     )
 
@@ -230,7 +230,7 @@ async def change_courses_keyboard(session: AsyncSession,
     # Кнопка "Назад"
     if page > 0:
         navigation_buttons.append(
-            InlineKeyboardButton(text="Назад",
+            InlineKeyboardButton(text="⬅️ Назад",
                                  callback_data=f"changepage_{specialization_id}_{page - 1}"))
 
     # Проверяем, есть ли следующая страница
@@ -239,7 +239,7 @@ async def change_courses_keyboard(session: AsyncSession,
     next_page_result = await session.execute(next_page_stmt)
     if next_page_result.scalars().first():
         navigation_buttons.append(
-            InlineKeyboardButton(text="Вперед",
+            InlineKeyboardButton(text="➡️ Вперед",
                                  callback_data=f"changepage_{specialization_id}_{page + 1}"))
 
     if navigation_buttons:
@@ -285,7 +285,7 @@ async def admin_projects_menu():
         InlineKeyboardButton(text="Добавить", callback_data="projects:add"),
         InlineKeyboardButton(text="Изменить", callback_data="projects:edit"),
         InlineKeyboardButton(text="Удалить", callback_data="projects:delete"),
-        InlineKeyboardButton(text="Назад", callback_data="projects:admin_main_menu")
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="projects:admin_main_menu")
     ]
 
     builder.add(*buttons)
@@ -351,7 +351,7 @@ async def admin_specializations_menu():
                              callback_data="specializations:edit"),
         InlineKeyboardButton(text="Удалить",
                              callback_data="specializations:delete"),
-        InlineKeyboardButton(text="Назад",
+        InlineKeyboardButton(text="⬅️ Назад",
                              callback_data="specializations:admin_main_menu")
     ]
 
@@ -426,7 +426,7 @@ async def admin_courses_menu():
                              callback_data="courses:edit"),
         InlineKeyboardButton(text="Удалить",
                              callback_data="courses:delete"),
-        InlineKeyboardButton(text="Назад",
+        InlineKeyboardButton(text="⬅️ Назад",
                              callback_data="courses:admin_main_menu")
     ]
 
@@ -487,21 +487,6 @@ async def confirm_delete_courses():
 
 
 
-# Проекты
-# async def bc_projects_keyboard(session: AsyncSession):
-#     builder = InlineKeyboardBuilder()
-#     result = await session.execute(select(Project))
-#     projects = result.scalars().all()
-#
-#     for project in projects:
-#         builder.button(
-#             text=project.title,
-#             callback_data=f"project_{project.id}"
-#         )
-#
-#     builder.adjust(1)
-#     return builder
-
 
 # Курсы
 async def bc_courses_keyboard(
@@ -545,7 +530,7 @@ async def bc_courses_keyboard(
     if page > 0:
         nav_buttons.append(
             InlineKeyboardButton(
-                text="Назад",
+                text="⬅️ Назад",
                 callback_data=f"bcpage_{page - 1}_{search_query or ''}"
             )
         )
@@ -554,7 +539,7 @@ async def bc_courses_keyboard(
     if next_page.scalars().first():
         nav_buttons.append(
             InlineKeyboardButton(
-                text="Вперед",
+                text="➡️ Вперед",
                 callback_data=f"bcpage_{page + 1}_{search_query or ''}"
             )
         )
@@ -566,7 +551,9 @@ async def bc_courses_keyboard(
         InlineKeyboardButton(
             text="🔍 Поиск курсов",
             callback_data="courses_search"
-        ),
+        )
+    )
+    builder.row(
         InlineKeyboardButton(
             text="✅ Завершить выбор",
             callback_data="finish_courses_selection"
@@ -578,7 +565,7 @@ async def bc_courses_keyboard(
 
 # Универсальная кнопка Назад
 async def add_back_button(builder: InlineKeyboardBuilder, back_state: str = "menu"):
-    builder.button(text="Назад", callback_data=f"back_{back_state}")
+    builder.button(text="⬅️ Назад", callback_data=f"back_{back_state}")
     builder.adjust(1)
 
 

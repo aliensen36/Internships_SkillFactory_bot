@@ -1,9 +1,10 @@
+import io
 import os
 from aiofiles import open as aio_open
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm import state
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import FSInputFile, CallbackQuery, InlineKeyboardButton
+from aiogram.types import FSInputFile, CallbackQuery, InlineKeyboardButton, BufferedInputFile
 from aiogram import F, Router, Bot
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -15,6 +16,8 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from sqlalchemy import select, func, distinct
 from datetime import datetime, timedelta
 from collections import defaultdict
+import pandas as pd
+from aiogram.types import BufferedInputFile
 
 from app.keyboards.inline import admin_main_menu
 from app.keyboards.reply import kb_admin_main, kb_main
@@ -119,6 +122,11 @@ async def show_users_statistics(
         InlineKeyboardButton(
             text="Сортировка по числу подписчиков",
             callback_data="stats_sort_users")
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="Выгрузить в Excel",
+            callback_data="export_users_excel")
     )
     builder.row(
         InlineKeyboardButton(
@@ -283,9 +291,52 @@ async def process_search(message: Message, session: AsyncSession, state: FSMCont
     await state.clear()
 
 
+@admin_stats_router.callback_query(F.data == 'export_users_excel')
+async def export_users_to_excel(callback: CallbackQuery, session: AsyncSession):
+    # Получаем данные пользователей с информацией о курсах
+    query = (
+        select(
+            User.first_name,
+            User.last_name,
+            User.username,
+            Course.name.label("course_name")
+        )
+        .join(Course, User.course_id == Course.id, isouter=True)
+        .order_by(User.id)
+    )
 
+    result = await session.execute(query)
+    users_data = result.all()
 
+    # Преобразуем данные в DataFrame
+    df = pd.DataFrame(
+        [(u.first_name or '', u.last_name or '', u.username or '', u.course_name or '')
+         for u in users_data],
+        columns=['Имя', 'Фамилия', 'Username', 'Курс']
+    )
 
+    # Создаем Excel файл в памяти
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Пользователи')
+        worksheet = writer.sheets['Пользователи']
+
+        # Настраиваем ширину колонок
+        worksheet.set_column('A:A', 20)
+        worksheet.set_column('B:B', 20)
+        worksheet.set_column('C:C', 20)
+        worksheet.set_column('D:D', 30)
+
+    # Подготавливаем файл для отправки
+    output.seek(0)
+    excel_file = BufferedInputFile(output.read(), filename='users_report.xlsx')
+
+    # Отправляем файл
+    await callback.message.answer_document(
+        document=excel_file,
+        caption="📊 Отчет по пользователям"
+    )
+    await callback.answer()
 
 
 

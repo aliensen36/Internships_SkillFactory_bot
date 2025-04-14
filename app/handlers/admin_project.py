@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import ProjectAddState, ProjectEditState, ProjectDeleteState
+from app.handlers.admin import hide_urls
 from app.keyboards.inline import admin_projects_menu, confirm_delete_keyboard, admin_main_menu, \
     confirm_cancel_add_projects, confirm_cancel_edit_projects
 from app.keyboards.reply import kb_admin_main
@@ -234,8 +235,9 @@ async def select_project_to_edit(callback: CallbackQuery,
         await state.update_data(
             project_id=project_id,
             current_title=project.title,
-            current_content=project.description,
-            current_benefit=project.benefit
+            current_description=project.description,
+            current_benefit=project.benefit,
+            current_example = project.example
         )
 
         # Создаем клавиатуру с кнопкой пропуска
@@ -313,7 +315,8 @@ async def process_new_title(message: Message,
 async def skip_description_edit(callback: CallbackQuery,
                             state: FSMContext):
     data = await state.get_data()
-    await state.update_data(new_description=data.get('current_description'))
+    current_description = data.get('current_description', '')
+    await state.update_data(new_description=current_description)
 
     skip_benefit_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -335,7 +338,9 @@ async def skip_description_edit(callback: CallbackQuery,
 @admin_project_router.message(ProjectEditState.waiting_for_description)
 async def process_new_description(message: Message,
                                   state: FSMContext):
-    await state.update_data(new_description=message.text)
+    # Обрабатываем URL в описании
+    processed_description = await hide_urls(message.text)
+    await state.update_data(new_description=processed_description)
 
     skip_benefit_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -357,7 +362,8 @@ async def process_new_description(message: Message,
 async def skip_benefit_edit(callback: CallbackQuery,
                             state: FSMContext):
     data = await state.get_data()
-    await state.update_data(new_benefit=data.get('current_benefit'))
+    current_benefit = data.get('current_benefit', '')
+    await state.update_data(new_benefit=current_benefit)
 
     skip_example_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -369,7 +375,7 @@ async def skip_benefit_edit(callback: CallbackQuery,
     )
 
     await callback.message.answer(
-        "Введите новые примеры проекта (примеры использования) или нажмите «Пропустить»:",
+        "Введите новые примеры успеха или нажмите «Пропустить»:",
         reply_markup=skip_example_edit_kb
     )
     await state.set_state(ProjectEditState.waiting_for_example)
@@ -379,7 +385,8 @@ async def skip_benefit_edit(callback: CallbackQuery,
 @admin_project_router.message(ProjectEditState.waiting_for_benefit)
 async def process_new_benefit(message: Message,
                               state: FSMContext):
-    await state.update_data(new_benefit=message.text)
+    processed_benefit = await hide_urls(message.text)
+    await state.update_data(new_benefit=processed_benefit)
 
     skip_example_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -422,30 +429,32 @@ async def skip_example_edit(callback: CallbackQuery,
                             state: FSMContext,
                             session: AsyncSession):
     data = await state.get_data()
-    await state.update_data(new_example=data.get('current_example'))
+    current_example = data.get('current_example', '')
+    await state.update_data(new_example=current_example)
 
     # Формируем сообщение с предпросмотром
     preview_message = (
         "📋 <b>Предпросмотр изменений:</b>\n\n"
         f"<b>Название:</b>\n"
-        f"Было: {data.get('current_title', 'не указано')}\n"
-        f"Стало: {data.get('new_title', data.get('current_title', 'не изменено'))}\n\n"
+        f"Было: {hide_urls(data.get('current_title', 'не указано'))}\n"
+        f"Стало: {hide_urls(data.get('new_title', data.get('current_title', 'не изменено')))}\n\n"
         f"<b>Описание:</b>\n"
-        f"Было: {data.get('current_content', 'не указано')}\n"
-        f"Стало: {data.get('new_description', data.get('current_content', 'не изменено'))}\n\n"
+        f"Было: {hide_urls(data.get('current_description', 'не указано'))}\n"
+        f"Стало: {hide_urls(data.get('new_description', data.get('current_description', 'не изменено')))}\n\n"
         f"<b>Бенефиты:</b>\n"
-        f"Было: {data.get('current_benefit', 'не указано')}\n"
-        f"Стало: {data.get('new_benefit', data.get('current_benefit', 'не изменено'))}\n\n"
+        f"Было: {hide_urls(data.get('current_benefit', 'не указано'))}\n"
+        f"Стало: {hide_urls(data.get('new_benefit', data.get('current_benefit', 'не изменено')))}\n\n"
         f"<b>Примеры:</b>\n"
-        f"Было: {data.get('current_example', 'не указано')}\n"
-        f"Стало: {data.get('new_example', data.get('current_example', 'не изменено'))}\n\n"
+        f"Было: {hide_urls(data.get('current_example', 'не указано'))}\n"
+        f"Стало: {hide_urls(data.get('new_example', data.get('current_example', 'не изменено')))}\n\n"
         "Подтвердите изменения или отмените:"
     )
 
     await callback.message.answer(
         preview_message,
         parse_mode="HTML",
-        reply_markup=await confirm_cancel_edit_projects()
+        reply_markup=await confirm_cancel_edit_projects(),
+        disable_web_page_preview=True
     )
     await state.set_state(ProjectEditState.waiting_for_confirmation)
     await callback.answer()
@@ -455,7 +464,8 @@ async def skip_example_edit(callback: CallbackQuery,
 async def process_new_example(message: Message,
                              state: FSMContext,
                              session: AsyncSession):
-    await state.update_data(new_example=message.text)
+    processed_example = await hide_urls(message.text)
+    await state.update_data(new_benefit=processed_example)
 
     # Получаем все данные для предпросмотра
     data = await state.get_data()
@@ -467,8 +477,8 @@ async def process_new_example(message: Message,
         f"Было: {data.get('current_title', 'не указано')}\n"
         f"Стало: {data.get('new_title', data.get('current_title', 'не изменено'))}\n\n"
         f"<b>Описание:</b>\n"
-        f"Было: {data.get('current_content', 'не указано')}\n"
-        f"Стало: {data.get('new_description', data.get('current_content', 'не изменено'))}\n\n"
+        f"Было: {data.get('current_description', 'не указано')}\n"
+        f"Стало: {data.get('new_description', data.get('current_description', 'не изменено'))}\n\n"
         f"<b>Бенефиты:</b>\n"
         f"Было: {data.get('current_benefit', 'не указано')}\n"
         f"Стало: {data.get('new_benefit', data.get('current_benefit', 'не изменено'))}\n\n"
@@ -481,7 +491,8 @@ async def process_new_example(message: Message,
     await message.answer(
         preview_message,
         parse_mode="HTML",
-        reply_markup=await confirm_cancel_edit_projects()
+        reply_markup=await confirm_cancel_edit_projects(),
+        disable_web_page_preview=True
     )
     await state.set_state(ProjectEditState.waiting_for_confirmation)
 
@@ -502,9 +513,9 @@ async def select_project_to_edit(callback: CallbackQuery,
         await state.update_data(
             project_id=project_id,
             current_title=project.title,
-            current_content=project.description,
+            current_description=project.description,
             current_benefit=project.benefit,
-            current_example=project.example  # Добавляем текущие примеры
+            current_example=project.example
         )
 
         skip_title_edit_keyboard = InlineKeyboardMarkup(

@@ -170,6 +170,7 @@ async def examples_project(callback: CallbackQuery,
         await callback.message.edit_text(
             about_text,
             reply_markup=await get_project_details_keyboard(project_id, session),
+            disable_web_page_preview=True,
             parse_mode="HTML"
             )
         await callback.answer()

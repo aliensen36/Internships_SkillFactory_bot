@@ -16,6 +16,7 @@ from collections import defaultdict
 from app.keyboards.inline import admin_main_menu
 from app.keyboards.reply import kb_admin_main, kb_main
 from database.models import User, Specialization, Course, Broadcast
+import re
 
 admin_router = Router()
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -46,3 +47,11 @@ async def exit_admin_panel(message: Message,
 
 
 
+
+def hide_urls(text: str) -> str:
+    """Заменяет все URL в тексте на слово 'ссылка'"""
+    return re.sub(r'https?://\S+', 'ссылка', text)
+
+def extract_urls(text: str) -> list:
+    """Извлекает все URL из текста"""
+    return re.findall(r'https?://\S+', text)

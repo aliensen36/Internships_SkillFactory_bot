@@ -49,8 +49,12 @@ async def exit_admin_panel(message: Message,
 
 
 def hide_urls(text: str) -> str:
-    """Заменяет все URL в тексте на слово 'ссылка'"""
-    return re.sub(r'https?://\S+', 'ссылка', text)
+    """Заменяет URL на кликабельные ссылки, сохраняя пунктуацию"""
+    return re.sub(
+        r'(https?://[^\s<>"\'()]+)',  # Не включаем пробелы и знаки пунктуации в URL
+        r'<a href="\1">ссылка</a>',
+        text
+    )
 
 def extract_urls(text: str) -> list:
     """Извлекает все URL из текста"""

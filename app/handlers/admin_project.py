@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import ProjectAddState, ProjectEditState, ProjectDeleteState
-from app.handlers.admin import hide_urls
+from app.handlers.admin import hide_urls, extract_urls
 from app.keyboards.inline import admin_projects_menu, confirm_delete_keyboard, admin_main_menu, \
     confirm_cancel_add_projects, confirm_cancel_edit_projects
 from app.keyboards.reply import kb_admin_main
@@ -178,6 +178,7 @@ async def confirm_project_add(callback: CallbackQuery,
 
 
 
+
 @admin_project_router.callback_query(F.data == "projects:edit")
 async def edit_project(callback: CallbackQuery,
                        state: FSMContext,
@@ -194,17 +195,13 @@ async def edit_project(callback: CallbackQuery,
             await callback.message.answer("📭 Список проектов пуст")
             return
 
-        # Создаем клавиатуру
         builder = InlineKeyboardBuilder()
-
-        # Добавляем кнопки для каждого проекта
         for project in projects:
             builder.button(
                 text=f"{project.title}",
                 callback_data=f"edit_project_{project.id}"
             )
 
-        # Форматируем кнопки
         builder.adjust(1, repeat=True)
 
         await callback.message.answer(
@@ -218,7 +215,6 @@ async def edit_project(callback: CallbackQuery,
         logging.error(f"Error in view_projects: {e}")
 
 
-# Обработчик выбора проекта для редактирования
 @admin_project_router.callback_query(ProjectEditState.waiting_for_project_selection,
                                      F.data.startswith("edit_project_"))
 async def select_project_to_edit(callback: CallbackQuery,
@@ -237,19 +233,20 @@ async def select_project_to_edit(callback: CallbackQuery,
             current_title=project.title,
             current_description=project.description,
             current_benefit=project.benefit,
-            current_example = project.example
+            current_example=project.example,
+            current_raw_description=project.raw_description,
+            current_raw_benefit=project.raw_benefit,
+            current_raw_example=project.raw_example
         )
 
-        # Создаем клавиатуру с кнопкой пропуска
         skip_title_edit_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить",
-                                      callback_data="skip_title_edit")]
+                [InlineKeyboardButton(text="Пропустить", callback_data="skip_title_edit")]
             ]
         )
 
-        await callback.message.edit_text(
-            f"Редактирование проекта:  <b>{project.title}</b>\n\n"
+        await callback.message.answer(
+            f"Редактирование проекта: <b>{project.title}</b>\n\n"
             f"Введите новое название проекта или нажмите «Пропустить»:",
             reply_markup=skip_title_edit_keyboard,
             parse_mode="HTML"
@@ -260,45 +257,41 @@ async def select_project_to_edit(callback: CallbackQuery,
 
     except Exception as e:
         logging.error(f"Error in select_project_to_edit: {e}", exc_info=True)
-        await callback.answer("Произошла ошибка при обработке запроса",
-                              show_alert=True)
+        await callback.answer("Произошла ошибка при обработке запроса", show_alert=True)
         await session.rollback()
 
-
-# Обработчик пропуска изменения названия
 @admin_project_router.callback_query(ProjectEditState.waiting_for_title,
                                      F.data == "skip_title_edit")
-async def skip_title_edit(callback: CallbackQuery,
-                          state: FSMContext):
-    data = await state.get_data()
-    await state.update_data(new_title=data.get('current_title'))
+async def skip_title_edit(callback: CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        await state.update_data(new_title=data.get('current_title'))
 
-    skip_description_edit_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_description_edit")]
-        ]
-    )
+        skip_description_edit_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Пропустить", callback_data="skip_description_edit")]
+            ]
+        )
 
-    await callback.message.answer(
-        "Введите новое описание проекта или нажмите «Пропустить»:",
-        reply_markup=skip_description_edit_kb
-    )
+        await callback.message.answer(
+            "Введите новое описание проекта или нажмите «Пропустить»:",
+            reply_markup=skip_description_edit_kb
+        )
+        await callback.answer()
+        await state.set_state(ProjectEditState.waiting_for_description)
+    except Exception as e:
+        logging.error(f"Error in skip_title_edit: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
 
-    await callback.answer()
-    await state.set_state(ProjectEditState.waiting_for_description)
 
 
-# Обработчик ввода нового названия
 @admin_project_router.message(ProjectEditState.waiting_for_title)
-async def process_new_title(message: Message,
-                            state: FSMContext):
+async def process_new_title(message: Message, state: FSMContext):
     await state.update_data(new_title=message.text)
 
     skip_description_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_description_edit")]
+            [InlineKeyboardButton(text="Пропустить", callback_data="skip_description_edit")]
         ]
     )
 
@@ -309,43 +302,44 @@ async def process_new_title(message: Message,
     await state.set_state(ProjectEditState.waiting_for_description)
 
 
-# Обработчик пропуска изменения описания
-@admin_project_router.callback_query(ProjectEditState.waiting_for_description,
-                                     F.data == "skip_description_edit")
-async def skip_description_edit(callback: CallbackQuery,
-                            state: FSMContext):
-    data = await state.get_data()
-    current_description = data.get('current_description', '')
-    await state.update_data(new_description=current_description)
+@admin_project_router.callback_query(ProjectEditState.waiting_for_description, F.data == "skip_description_edit")
+async def skip_description_edit(callback: CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        await state.update_data(
+            new_description=data.get('current_description', ''),
+            new_raw_description=data.get('current_raw_description', '')
+        )
 
-    skip_benefit_edit_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_benefit_edit")]
-        ]
-    )
+        skip_benefit_edit_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Пропустить", callback_data="skip_benefit_edit")]
+            ]
+        )
 
-    await callback.message.answer(
-        "Введите новое описание бенефитов проекта или нажмите «Пропустить»:",
-        reply_markup=skip_benefit_edit_kb
-    )
+        await callback.message.answer(
+            "Введите новое описание бенефитов проекта или нажмите «Пропустить»:",
+            reply_markup=skip_benefit_edit_kb
+        )
+        await callback.answer()
+        await state.set_state(ProjectEditState.waiting_for_benefit)
+    except Exception as e:
+        logging.error(f"Error in skip_description_edit: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
 
-    await callback.answer()
-    await state.set_state(ProjectEditState.waiting_for_benefit)
 
-
-# Обработчик ввода нового описания
 @admin_project_router.message(ProjectEditState.waiting_for_description)
-async def process_new_description(message: Message,
-                                  state: FSMContext):
-    # Обрабатываем URL в описании
-    processed_description = await hide_urls(message.text)
-    await state.update_data(new_description=processed_description)
+async def process_new_description(message: Message, state: FSMContext):
+    processed_text = hide_urls(message.text)
+    await state.update_data(
+        new_description=processed_text,
+        new_raw_description=message.text
+    )
+
 
     skip_benefit_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_benefit_edit")]
+            [InlineKeyboardButton(text="Пропустить", callback_data="skip_benefit_edit")]
         ]
     )
 
@@ -356,44 +350,46 @@ async def process_new_description(message: Message,
     await state.set_state(ProjectEditState.waiting_for_benefit)
 
 
-# Обработчик пропуска изменения бенефитов (переход к примерам)
-@admin_project_router.callback_query(ProjectEditState.waiting_for_benefit,
-                                     F.data == "skip_benefit_edit")
-async def skip_benefit_edit(callback: CallbackQuery,
-                            state: FSMContext):
-    data = await state.get_data()
-    current_benefit = data.get('current_benefit', '')
-    await state.update_data(new_benefit=current_benefit)
+@admin_project_router.callback_query(ProjectEditState.waiting_for_benefit, F.data == "skip_benefit_edit")
+async def skip_benefit_edit(callback: CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        await state.update_data(
+            new_benefit=data.get('current_benefit', ''),
+            new_raw_benefit=data.get('current_raw_benefit', '')
+        )
 
-    skip_example_edit_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_example_edit")],
-            [InlineKeyboardButton(text="⬅️ Назад к бенефитам",
-                                  callback_data="back_to_benefit_edit")]
-        ]
-    )
+        skip_example_edit_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Пропустить", callback_data="skip_example_edit")],
+                [InlineKeyboardButton(text="⬅️ Назад к бенефитам", callback_data="back_to_benefit_edit")]
+            ]
+        )
 
-    await callback.message.answer(
-        "Введите новые примеры успеха или нажмите «Пропустить»:",
-        reply_markup=skip_example_edit_kb
-    )
-    await state.set_state(ProjectEditState.waiting_for_example)
-    await callback.answer()
+        await callback.message.answer(
+            "Введите новые примеры успеха или нажмите «Пропустить»:",
+            reply_markup=skip_example_edit_kb
+        )
+        await callback.answer()
+        await state.set_state(ProjectEditState.waiting_for_example)
+    except Exception as e:
+        logging.error(f"Error in skip_benefit_edit: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
 
-# Обработчик ввода новых бенефитов (переход к примерам)
+
 @admin_project_router.message(ProjectEditState.waiting_for_benefit)
-async def process_new_benefit(message: Message,
-                              state: FSMContext):
-    processed_benefit = await hide_urls(message.text)
-    await state.update_data(new_benefit=processed_benefit)
+async def process_new_benefit(message: Message, state: FSMContext):
+    urls = extract_urls(message.text)
+    await state.update_data(
+        new_benefit=hide_urls(message.text),
+        new_raw_benefit=message.text,
+        benefit_urls=urls
+    )
 
     skip_example_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_example_edit")],
-            [InlineKeyboardButton(text="⬅️ Назад к бенефитам",
-                                  callback_data="back_to_benefit_edit")]
+            [InlineKeyboardButton(text="Пропустить", callback_data="skip_example_edit")],
+            [InlineKeyboardButton(text="⬅️ Назад к бенефитам", callback_data="back_to_benefit_edit")]
         ]
     )
 
@@ -403,50 +399,50 @@ async def process_new_benefit(message: Message,
     )
     await state.set_state(ProjectEditState.waiting_for_example)
 
-# Обработчик возврата к редактированию бенефитов
-@admin_project_router.callback_query(ProjectEditState.waiting_for_example,
-                                     F.data == "back_to_benefit_edit")
-async def back_to_benefit_edit(callback: CallbackQuery,
-                               state: FSMContext):
-    skip_benefit_edit_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить",
-                                  callback_data="skip_benefit_edit")]
-        ]
-    )
+@admin_project_router.callback_query(ProjectEditState.waiting_for_example, F.data == "back_to_benefit_edit")
+async def back_to_benefit_edit(callback: CallbackQuery, state: FSMContext):
+    try:
+        skip_benefit_edit_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Пропустить", callback_data="skip_benefit_edit")]
+            ]
+        )
 
-    await callback.message.answer(
-        "Введите новое описание бенефитов проекта или нажмите «Пропустить»:",
-        reply_markup=skip_benefit_edit_kb
-    )
-    await state.set_state(ProjectEditState.waiting_for_benefit)
-    await callback.answer()
+        await callback.message.answer(
+            "Введите новое описание бенефитов проекта или нажмите «Пропустить»:",
+            reply_markup=skip_benefit_edit_kb
+        )
+        await callback.answer()
+        await state.set_state(ProjectEditState.waiting_for_benefit)
+    except Exception as e:
+        logging.error(f"Error in back_to_benefit_edit: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
 
-# Обработчик пропуска изменения примеров
+
+
 @admin_project_router.callback_query(ProjectEditState.waiting_for_example,
                                      F.data == "skip_example_edit")
-async def skip_example_edit(callback: CallbackQuery,
-                            state: FSMContext,
-                            session: AsyncSession):
+async def skip_example_edit(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
-    current_example = data.get('current_example', '')
-    await state.update_data(new_example=current_example)
+    await state.update_data(
+        new_example=data.get('current_example', ''),
+        new_raw_example=data.get('current_raw_example', '')
+    )
 
-    # Формируем сообщение с предпросмотром
     preview_message = (
         "📋 <b>Предпросмотр изменений:</b>\n\n"
         f"<b>Название:</b>\n"
-        f"Было: {hide_urls(data.get('current_title', 'не указано'))}\n"
-        f"Стало: {hide_urls(data.get('new_title', data.get('current_title', 'не изменено')))}\n\n"
+        f"Было: {data.get('current_title', 'не указано')}\n"
+        f"Стало: {data.get('new_title', data.get('current_title', 'не изменено'))}\n\n"
         f"<b>Описание:</b>\n"
-        f"Было: {hide_urls(data.get('current_description', 'не указано'))}\n"
-        f"Стало: {hide_urls(data.get('new_description', data.get('current_description', 'не изменено')))}\n\n"
+        f"Было: {data.get('current_description', 'не указано')}\n"
+        f"Стало: {data.get('new_description', data.get('current_description', 'не изменено'))}\n\n"
         f"<b>Бенефиты:</b>\n"
-        f"Было: {hide_urls(data.get('current_benefit', 'не указано'))}\n"
-        f"Стало: {hide_urls(data.get('new_benefit', data.get('current_benefit', 'не изменено')))}\n\n"
+        f"Было: {data.get('current_benefit', 'не указано')}\n"
+        f"Стало: {data.get('new_benefit', data.get('current_benefit', 'не изменено'))}\n\n"
         f"<b>Примеры:</b>\n"
-        f"Было: {hide_urls(data.get('current_example', 'не указано'))}\n"
-        f"Стало: {hide_urls(data.get('new_example', data.get('current_example', 'не изменено')))}\n\n"
+        f"Было: {data.get('current_example', 'не указано')}\n"
+        f"Стало: {data.get('new_example', data.get('current_example', 'не изменено'))}\n\n"
         "Подтвердите изменения или отмените:"
     )
 
@@ -457,20 +453,18 @@ async def skip_example_edit(callback: CallbackQuery,
         disable_web_page_preview=True
     )
     await state.set_state(ProjectEditState.waiting_for_confirmation)
-    await callback.answer()
 
-# Обработчик ввода новых примеров
+
 @admin_project_router.message(ProjectEditState.waiting_for_example)
-async def process_new_example(message: Message,
-                             state: FSMContext,
-                             session: AsyncSession):
-    processed_example = await hide_urls(message.text)
-    await state.update_data(new_benefit=processed_example)
+async def process_new_example(message: Message, state: FSMContext, session: AsyncSession):
+    urls = extract_urls(message.text)
+    await state.update_data(
+        new_example=hide_urls(message.text),
+        new_raw_example=message.text,
+        example_urls=urls
+    )
 
-    # Получаем все данные для предпросмотра
     data = await state.get_data()
-
-    # Формируем сообщение с предпросмотром изменений
     preview_message = (
         "📋 <b>Предпросмотр изменений:</b>\n\n"
         f"<b>Название:</b>\n"
@@ -496,52 +490,7 @@ async def process_new_example(message: Message,
     )
     await state.set_state(ProjectEditState.waiting_for_confirmation)
 
-# Модифицируем обработчик выбора проекта для редактирования
-@admin_project_router.callback_query(ProjectEditState.waiting_for_project_selection,
-                                     F.data.startswith("edit_project_"))
-async def select_project_to_edit(callback: CallbackQuery,
-                                 state: FSMContext,
-                                 session: AsyncSession):
-    try:
-        project_id = int(callback.data.split("_")[-1])
-        project = await session.get(Project, project_id)
 
-        if not project:
-            await callback.answer("Проект не найден", show_alert=True)
-            return
-
-        await state.update_data(
-            project_id=project_id,
-            current_title=project.title,
-            current_description=project.description,
-            current_benefit=project.benefit,
-            current_example=project.example
-        )
-
-        skip_title_edit_keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить",
-                                      callback_data="skip_title_edit")]
-            ]
-        )
-
-        await callback.message.edit_text(
-            f"Редактирование проекта:  <b>{project.title}</b>\n\n"
-            f"Введите новое название проекта или нажмите «Пропустить»:",
-            reply_markup=skip_title_edit_keyboard,
-            parse_mode="HTML"
-        )
-
-        await callback.answer()
-        await state.set_state(ProjectEditState.waiting_for_title)
-
-    except Exception as e:
-        logging.error(f"Error in select_project_to_edit: {e}", exc_info=True)
-        await callback.answer("Произошла ошибка при обработке запроса",
-                              show_alert=True)
-        await session.rollback()
-
-# Модифицируем обработчик подтверждения изменений
 @admin_project_router.callback_query(ProjectEditState.waiting_for_confirmation,
                                      F.data == "confirm_edit_project")
 async def confirm_project_edit(callback: CallbackQuery,
@@ -565,10 +514,13 @@ async def confirm_project_edit(callback: CallbackQuery,
         project.title = data['new_title']
     if 'new_description' in data:
         project.description = data['new_description']
+        project.raw_description = data.get('new_raw_description', data['new_description'])
     if 'new_benefit' in data:
         project.benefit = data['new_benefit']
-    if 'new_example' in data:  # Добавляем сохранение примеров
+        project.raw_benefit = data.get('new_raw_benefit', data['new_benefit'])
+    if 'new_example' in data:
         project.example = data['new_example']
+        project.raw_example = data.get('new_raw_example', data['new_example'])
 
     await session.commit()
 
@@ -580,7 +532,7 @@ async def confirm_project_edit(callback: CallbackQuery,
     await callback.answer()
     await state.clear()
 
-# Обработчик отмены изменений
+
 @admin_project_router.callback_query(F.data == "cancel_edit_project")
 async def cancel_project_edit(callback: CallbackQuery,
                                state: FSMContext,
@@ -589,6 +541,7 @@ async def cancel_project_edit(callback: CallbackQuery,
                                   reply_markup=await admin_projects_menu())
     await callback.answer()
     await state.clear()
+
 
 
 

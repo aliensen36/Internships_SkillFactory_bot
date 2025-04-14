@@ -89,6 +89,9 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     benefit: Mapped[str] = mapped_column(Text, nullable=True)
     example: Mapped[str] = mapped_column(Text, nullable=True)
+    raw_description: Mapped[str] = mapped_column(Text, nullable=True)  # Оригинальное описание с URL
+    raw_benefit: Mapped[str] = mapped_column(Text, nullable=True)  # Оригинальные бенефиты с URL
+    raw_example: Mapped[str] = mapped_column(Text, nullable=True)  # Оригинальные примеры с URL
 
     broadcasts: Mapped[List["Broadcast"]] = relationship(
         back_populates="project",

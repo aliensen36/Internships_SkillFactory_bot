@@ -33,6 +33,12 @@ python -m pip freeze > requirements.txt # Обновление списка за
 python main.py
 ```
 
+### Миграции
+```bash
+alembic revision --autogenerate -m "Сообщение"
+
+alembic upgrade head
+```
 
 ### 🛠️ Технологии
 

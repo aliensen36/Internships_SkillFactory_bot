@@ -241,7 +241,12 @@ async def select_project_to_edit(callback: CallbackQuery,
 
         skip_title_edit_keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить", callback_data="skip_title_edit")]
+                [InlineKeyboardButton(
+                    text="Пропустить",
+                    callback_data="skip_title_edit")],
+                [InlineKeyboardButton(
+                    text="⬅️ Назад к выбору проекта",
+                    callback_data="back_to_project_selection")]
             ]
         )
 
@@ -260,6 +265,16 @@ async def select_project_to_edit(callback: CallbackQuery,
         await callback.answer("Произошла ошибка при обработке запроса", show_alert=True)
         await session.rollback()
 
+
+# Обработчик возврата к выбору проекта
+@admin_project_router.callback_query(ProjectEditState.waiting_for_title,
+                                     F.data == "back_to_project_selection")
+async def back_to_project_selection(callback: CallbackQuery,
+                                    state: FSMContext,
+                                    session: AsyncSession):
+    await edit_project(callback, state, session)
+
+
 @admin_project_router.callback_query(ProjectEditState.waiting_for_title,
                                      F.data == "skip_title_edit")
 async def skip_title_edit(callback: CallbackQuery, state: FSMContext):
@@ -269,7 +284,12 @@ async def skip_title_edit(callback: CallbackQuery, state: FSMContext):
 
         skip_description_edit_kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить", callback_data="skip_description_edit")]
+                [InlineKeyboardButton(
+                    text="Пропустить",
+                    callback_data="skip_description_edit")],
+                [InlineKeyboardButton(
+                    text="⬅️ Назад к названию",
+                    callback_data="back_to_title_edit")]
             ]
         )
 
@@ -284,6 +304,31 @@ async def skip_title_edit(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
+# Обработчик возврата к редактированию названия
+@admin_project_router.callback_query(ProjectEditState.waiting_for_description,
+                                     F.data == "back_to_title_edit")
+async def back_to_title_edit(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+
+    skip_title_edit_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Пропустить",
+                callback_data="skip_title_edit")],
+            [InlineKeyboardButton(
+                text="⬅️ Назад к выбору проекта",
+                callback_data="back_to_project_selection")]
+        ]
+    )
+
+    await callback.message.answer(
+        f"Редактирование названия проекта: <b>{data.get('current_title', '')}</b>\n\n"
+        f"Введите новое название проекта или нажмите «Пропустить»:",
+        reply_markup=skip_title_edit_kb
+    )
+    await callback.answer()
+    await state.set_state(ProjectEditState.waiting_for_title)
+
 
 @admin_project_router.message(ProjectEditState.waiting_for_title)
 async def process_new_title(message: Message, state: FSMContext):
@@ -291,7 +336,12 @@ async def process_new_title(message: Message, state: FSMContext):
 
     skip_description_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить", callback_data="skip_description_edit")]
+            [InlineKeyboardButton(
+                text="Пропустить",
+                callback_data="skip_description_edit")],
+            [InlineKeyboardButton(
+                text="⬅️ Назад к названию",
+                callback_data="back_to_title_edit")]
         ]
     )
 
@@ -313,7 +363,12 @@ async def skip_description_edit(callback: CallbackQuery, state: FSMContext):
 
         skip_benefit_edit_kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить", callback_data="skip_benefit_edit")]
+                [InlineKeyboardButton(
+                    text="Пропустить",
+                    callback_data="skip_benefit_edit")],
+                [InlineKeyboardButton(
+                    text="⬅️ Назад к описанию",
+                    callback_data="back_to_description_edit")]
             ]
         )
 
@@ -328,6 +383,31 @@ async def skip_description_edit(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
+# Обработчик возврата к редактированию описания
+@admin_project_router.callback_query(ProjectEditState.waiting_for_benefit,
+                                     F.data == "back_to_description_edit")
+async def back_to_description_edit(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+
+    skip_description_edit_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Пропустить",
+                callback_data="skip_description_edit")],
+            [InlineKeyboardButton(
+                text="⬅️ Назад к названию",
+                callback_data="back_to_title_edit")]
+        ]
+    )
+
+    await callback.message.answer(
+        "Введите новое описание проекта или нажмите «Пропустить»:",
+        reply_markup=skip_description_edit_kb
+    )
+    await callback.answer()
+    await state.set_state(ProjectEditState.waiting_for_description)
+
+
 @admin_project_router.message(ProjectEditState.waiting_for_description)
 async def process_new_description(message: Message, state: FSMContext):
     processed_text = hide_urls(message.text)
@@ -339,7 +419,12 @@ async def process_new_description(message: Message, state: FSMContext):
 
     skip_benefit_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить", callback_data="skip_benefit_edit")]
+            [InlineKeyboardButton(
+                text="Пропустить",
+                callback_data="skip_benefit_edit")],
+            [InlineKeyboardButton(
+                text="⬅️ Назад к описанию",
+                callback_data="back_to_description_edit")]
         ]
     )
 
@@ -361,8 +446,12 @@ async def skip_benefit_edit(callback: CallbackQuery, state: FSMContext):
 
         skip_example_edit_kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить", callback_data="skip_example_edit")],
-                [InlineKeyboardButton(text="⬅️ Назад к бенефитам", callback_data="back_to_benefit_edit")]
+                [InlineKeyboardButton(
+                    text="Пропустить",
+                    callback_data="skip_example_edit")],
+                [InlineKeyboardButton(
+                    text="⬅️ Назад к бенефитам",
+                    callback_data="back_to_benefit_edit")]
             ]
         )
 
@@ -388,8 +477,12 @@ async def process_new_benefit(message: Message, state: FSMContext):
 
     skip_example_edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустить", callback_data="skip_example_edit")],
-            [InlineKeyboardButton(text="⬅️ Назад к бенефитам", callback_data="back_to_benefit_edit")]
+            [InlineKeyboardButton(
+                text="Пропустить",
+                callback_data="skip_example_edit")],
+            [InlineKeyboardButton(
+                text="⬅️ Назад к бенефитам",
+                callback_data="back_to_benefit_edit")]
         ]
     )
 
@@ -404,7 +497,12 @@ async def back_to_benefit_edit(callback: CallbackQuery, state: FSMContext):
     try:
         skip_benefit_edit_kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Пропустить", callback_data="skip_benefit_edit")]
+                [InlineKeyboardButton(
+                    text="Пропустить",
+                    callback_data="skip_benefit_edit")],
+                [InlineKeyboardButton(
+                    text="⬅️ Назад к описанию",
+                    callback_data="back_to_description_edit")]
             ]
         )
 

@@ -145,6 +145,10 @@ cython_debug/
 
 alembic.ini
 alembic/
+!migrations/versions/
+!migrations/env.py
+!migrations/script.py.mako
+
 fixtures/
 /sf_db.db
 media/images

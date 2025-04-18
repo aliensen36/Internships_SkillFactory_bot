@@ -18,10 +18,10 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import pandas as pd
 from aiogram.types import BufferedInputFile
-
 from app.keyboards.inline import admin_main_menu
 from app.keyboards.reply import kb_admin_main, kb_main
 from database.models import User, Specialization, Course, Broadcast, BroadcastCourseAssociation, Project
+
 
 admin_stats_router = Router()
 admin_stats_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())

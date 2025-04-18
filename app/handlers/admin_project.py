@@ -1,8 +1,9 @@
+import io
 import logging
 from aiogram import F, Router
 from aiogram.filters import Filter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from app.keyboards.inline import admin_projects_menu, confirm_delete_keyboard, a
     confirm_cancel_add_projects, confirm_cancel_edit_projects
 from app.keyboards.reply import kb_admin_main
 from database.models import Project
+import pandas as pd
 
 
 admin_project_router = Router()
@@ -39,6 +41,7 @@ async def show_projects_menu(callback: CallbackQuery,):
         await callback.answer("⚠️ Ошибка при загрузке меню", show_alert=True)
 
 
+# Хендлер для кнопки "Список"
 @admin_project_router.callback_query(F.data == "projects:list")
 async def view_projects(callback: CallbackQuery,
                         session: AsyncSession):
@@ -67,6 +70,95 @@ async def view_projects(callback: CallbackQuery,
     except Exception as e:
         await callback.message.answer("⚠️ Произошла ошибка при загрузке проектов")
         logging.error(f"Error in view_projects: {e}")
+
+
+# Хендлер для кнопки "Выгрузить в Excel"
+@admin_project_router.callback_query(F.data == "projects:export")
+async def export_projects_to_excel(callback: CallbackQuery, session: AsyncSession):
+    try:
+        # Получаем все проекты из базы данных
+        result = await session.execute(select(Project))
+        projects = result.scalars().all()
+
+        if not projects:
+            await callback.answer("📭 Список проектов пуст", show_alert=True)
+            return
+
+        # Создаем DataFrame с нужными полями
+        data = {
+            "Название": [],
+            "Описание": [],
+            "Бенефиты": [],
+            "Примеры": []
+        }
+
+        for project in projects:
+            data["Название"].append(project.title)
+            data["Описание"].append(
+                project.raw_description if hasattr(project, 'raw_description') else project.description)
+            data["Бенефиты"].append(project.raw_benefit if hasattr(project, 'raw_benefit') else project.benefit)
+            data["Примеры"].append(project.raw_example if hasattr(project, 'raw_example') else project.example)
+
+        df = pd.DataFrame(data)
+
+        # Создаем excel файл в памяти
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Проекты')
+            workbook = writer.book
+            worksheet = writer.sheets['Проекты']
+
+            # Формат с переносом текста и выравниванием по верхнему левому краю
+            wrap_format = workbook.add_format({
+                'text_wrap': True,
+                'valign': 'top',    # Вертикальное выравнивание по верху
+                'align': 'left'      # Горизонтальное выравнивание по левому краю
+            })
+
+            # Формат для заголовков (жирный + выравнивание)
+            header_format = workbook.add_format({
+                'bold': True,
+                'valign': 'top',
+                'align': 'left',
+                'text_wrap': True
+            })
+
+            # Устанавливаем ширину столбцов (в символах)
+            column_widths = {
+                "Название": 30,
+                "Описание": 50,
+                "Бенефиты": 50,
+                "Примеры": 50
+            }
+
+            # Применяем настройки к каждому столбцу
+            for i, column in enumerate(df.columns):
+                worksheet.set_column(
+                    i, i,
+                    column_widths.get(column, 30),
+                    wrap_format
+                )
+
+            # Устанавливаем формат заголовков
+            for col_num, value in enumerate(df.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+
+            # Автоподбор высоты строк для данных
+            for row_num in range(1, len(df) + 1):
+                worksheet.set_row(row_num, None, wrap_format)
+
+        output.seek(0)
+
+        # Отправляем файл пользователю
+        await callback.message.answer_document(
+            document=BufferedInputFile(output.read(), filename="projects_export.xlsx"),
+            caption="📊 Выгрузка проектов в Excel"
+        )
+        await callback.answer()
+
+    except Exception as e:
+        logging.error(f"Error in export_projects_to_excel: {e}")
+        await callback.answer("⚠️ Ошибка при выгрузке проектов", show_alert=True)
 
 
 

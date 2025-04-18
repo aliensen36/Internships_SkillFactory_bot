@@ -285,11 +285,12 @@ async def admin_projects_menu():
         InlineKeyboardButton(text="Добавить", callback_data="projects:add"),
         InlineKeyboardButton(text="Изменить", callback_data="projects:edit"),
         InlineKeyboardButton(text="Удалить", callback_data="projects:delete"),
+        InlineKeyboardButton(text="Выгрузить в Excel", callback_data="projects:export"),
         InlineKeyboardButton(text="⬅️ Назад", callback_data="projects:admin_main_menu")
     ]
 
     builder.add(*buttons)
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2, 2)
 
     return builder.as_markup()
 

@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 from aiofiles import open as aio_open
 from aiogram.exceptions import TelegramBadRequest
@@ -21,6 +22,7 @@ from aiogram.types import BufferedInputFile
 from app.keyboards.inline import admin_main_menu
 from app.keyboards.reply import kb_admin_main, kb_main
 from database.models import User, Specialization, Course, Broadcast, BroadcastCourseAssociation, Project
+from datetime import datetime, time
 
 
 admin_stats_router = Router()
@@ -62,11 +64,17 @@ async def show_statistics_menu(callback: CallbackQuery):
     await callback.answer()
 
 
+
+# =====================================================================================
+# ----------------------------- Статистика пользователей ------------------------------
+# =====================================================================================
+
+
+
 # Обработчик статистики по пользователям
 class UserStatsState(StatesGroup):
     SORTING = State()
     SEARCH = State()
-
 
 
 @admin_stats_router.callback_query(F.data == 'stats_users')
@@ -143,8 +151,6 @@ async def show_users_statistics(
 
     await callback.answer()
 
-
-
 async def get_course_stats(session: AsyncSession, sort_by: str = 'users', search_query: str = None):
     query = select(
         Course.name,
@@ -211,7 +217,6 @@ async def sort_by_name(callback: CallbackQuery, session: AsyncSession, state: FS
         reply_markup=builder.as_markup()
     )
     await callback.answer()
-
 
 
 @admin_stats_router.callback_query(F.data == 'stats_sort_users')
@@ -335,12 +340,18 @@ async def export_users_to_excel(callback: CallbackQuery, session: AsyncSession):
 
 
 
+# =====================================================================================
+# ----------------------------- Статистика рассылок -----------------------------------
+# =====================================================================================
+
+
+
+
 class ExportMailingParams(StatesGroup):
     DATE_FROM = State()
     DATE_TO = State()
     COURSE = State()
     PROJECT = State()
-
 
 
 # Обработчик статистики по рассылкам
@@ -447,7 +458,7 @@ async def start_export_mailings(callback: CallbackQuery, state: FSMContext):
             callback_data="stats_mailings")
     )
 
-    await callback.message.edit_text(
+    await callback.message.answer(
         "Выберите параметры для выгрузки:",
         reply_markup=builder.as_markup()
     )
@@ -469,41 +480,34 @@ async def generate_mailings_report(
     project_id: int | None = None
 ):
     try:
-        # Формируем базовый запрос с проектами
-        query = (
+        # Базовый запрос без группировки по курсам и проектам
+        base_query = (
             select(
+                Broadcast.id,
                 Broadcast.created.label("date"),
                 Broadcast.text.label("message"),
-                Course.name.label("course"),
-                Project.title.label("project"),
-                func.count(User.id).label("recipients")
+                Project.title.label("project")
             )
-            .join(BroadcastCourseAssociation, Broadcast.id == BroadcastCourseAssociation.broadcast_id)
-            .join(Course, BroadcastCourseAssociation.course_id == Course.id)
-            .join(User, User.course_id == Course.id)
-            .outerjoin(Project, Broadcast.project_id == Project.id)  # Используем outerjoin для проектов
-            .group_by(Broadcast.id, Course.id, Project.id)
+            .outerjoin(Project, Broadcast.project_id == Project.id)
         )
 
-        # Применяем фильтры
+        # Применяем фильтры по датам
         if date_from and date_to:
-            query = query.where(Broadcast.created.between(date_from, date_to))
+            date_to_end = datetime.combine(date_to.date(), time(23, 59, 59))
+            base_query = base_query.where(Broadcast.created.between(date_from, date_to_end))
         elif date_from:
-            query = query.where(Broadcast.created >= date_from)
+            base_query = base_query.where(Broadcast.created >= date_from)
         elif date_to:
-            query = query.where(Broadcast.created <= date_to)
-
-        if course_id:
-            query = query.where(Course.id == course_id)
+            date_to_end = datetime.combine(date_to.date(), time(23, 59, 59))
+            base_query = base_query.where(Broadcast.created <= date_to_end)
 
         if project_id:
-            query = query.where(Project.id == project_id)
+            base_query = base_query.where(Project.id == project_id)
 
-        # Выполняем запрос
-        result = await session.execute(query)
-        mailings_data = result.all()
+        # Получаем все рассылки
+        mailings = (await session.execute(base_query)).all()
 
-        if not mailings_data:
+        if not mailings:
             error_msg = "Нет данных для выбранных параметров фильтрации"
             if isinstance(callback, CallbackQuery):
                 await callback.message.answer(error_msg)
@@ -511,14 +515,35 @@ async def generate_mailings_report(
                 await callback.answer(error_msg)
             return
 
+        # Для каждой рассылки получаем курсы и количество получателей
+        result_data = []
+        for mailing in mailings:
+            # Получаем курсы для рассылки
+            courses_query = (
+                select(Course.name)
+                .join(BroadcastCourseAssociation, BroadcastCourseAssociation.course_id == Course.id)
+                .where(BroadcastCourseAssociation.broadcast_id == mailing.id)
+            )
+            courses = (await session.execute(courses_query)).scalars().all()
+
+            # Получаем количество получателей
+            recipients_count = await session.scalar(
+                select(func.count(User.id))
+                .join(BroadcastCourseAssociation, User.course_id == BroadcastCourseAssociation.course_id)
+                .where(BroadcastCourseAssociation.broadcast_id == mailing.id)
+            )
+
+            # Формируем строку для отчета
+            result_data.append({
+                "Дата": mailing.date.strftime("%d.%m.%Y %H:%M") if mailing.date else "",
+                "Проект": mailing.project or "Не указан",
+                "Курсы": ", ".join(courses) if courses else "Нет курсов",
+                "Получателей": recipients_count or 0,
+                "Текст рассылки": mailing.message
+            })
+
         # Создаем DataFrame
-        df = pd.DataFrame([{
-            "Дата": m.date.strftime("%d.%m.%Y %H:%M") if m.date else "",
-            "Проект": m.project or "Не указан",
-            "Курс": m.course,
-            "Получателей": m.recipients,
-            "Текст рассылки": m.message
-        } for m in mailings_data])
+        df = pd.DataFrame(result_data)
 
         # Создаем Excel файл
         output = io.BytesIO()
@@ -529,28 +554,41 @@ async def generate_mailings_report(
             # Настраиваем ширину колонок
             worksheet.set_column('A:A', 20)  # Дата
             worksheet.set_column('B:B', 25)  # Проект
-            worksheet.set_column('C:C', 25)  # Курс
+            worksheet.set_column('C:C', 30)  # Курсы
             worksheet.set_column('D:D', 15)  # Получателей
             worksheet.set_column('E:E', 50)  # Текст рассылки
 
         # Подготавливаем файл для отправки
         output.seek(0)
-        excel_file = BufferedInputFile(output.read(), filename='mailings_report.xlsx')
+        filename = f"mailings_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        excel_file = BufferedInputFile(output.read(), filename=filename)
+
+        # Создаем клавиатуру с кнопкой "Назад"
+        back_button = InlineKeyboardBuilder()
+        back_button.row(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data="export_mailings"
+            )
+        )
 
         # Отправляем файл
         if isinstance(callback, CallbackQuery):
             await callback.message.answer_document(
                 document=excel_file,
-                caption="📊 Отчет по рассылкам"
+                caption="📊 Отчет по рассылкам",
+                reply_markup=back_button.as_markup()
             )
         else:
             await callback.answer_document(
                 document=excel_file,
-                caption="📊 Отчет по рассылкам"
+                caption="📊 Отчет по рассылкам",
+                reply_markup=back_button.as_markup()
             )
 
     except Exception as e:
-        await callback.answer()
+        logging.error(f"Ошибка при формировании отчета: {str(e)}", exc_info=True)
+        await callback.answer("⚠️ Произошла ошибка при формировании отчета")
 
 
 @admin_stats_router.callback_query(F.data == 'set_date_range')

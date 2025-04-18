@@ -62,11 +62,6 @@ async def show_statistics_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-
-
-
-
-
 # Обработчик статистики по пользователям
 class UserStatsState(StatesGroup):
     SORTING = State()
@@ -181,7 +176,7 @@ async def sort_by_name(callback: CallbackQuery, session: AsyncSession, state: FS
     course_stats = await get_course_stats(session, sort_by='name')
 
     text = [
-        "<b>👥 Статистика пользователей (сортировка по имени):</b>\n\n",
+        "<b>👥 Статистика пользователей (сортировка курсов по алфавиту):</b>\n\n",
         "<b>Распределение по курсам:</b>\n"
     ]
 
@@ -337,10 +332,6 @@ async def export_users_to_excel(callback: CallbackQuery, session: AsyncSession):
         caption="📊 Отчет по пользователям"
     )
     await callback.answer()
-
-
-
-
 
 
 

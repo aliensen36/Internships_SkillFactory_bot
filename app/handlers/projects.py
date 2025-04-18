@@ -285,7 +285,7 @@ async def send_broadcast_with_pagination(
                     logger.warning(f"Не удалось удалить сообщение {msg_id}: {e}")
 
         broadcast = broadcasts[index]
-        pagination_text = f"<b>Рассылка {index + 1} из {total}</b>"
+        pagination_text = f"<b>Мероприятие {index + 1} из {total}</b>"
         main_text = broadcast.text
         full_text = f"{main_text}\n\n{pagination_text}"
 

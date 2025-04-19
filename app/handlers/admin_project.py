@@ -5,8 +5,9 @@ from aiogram.filters import Filter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import ProjectAddState, ProjectEditState, ProjectDeleteState
@@ -609,7 +610,6 @@ async def back_to_benefit_edit(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Произошла ошибка", show_alert=True)
 
 
-
 @admin_project_router.callback_query(ProjectEditState.waiting_for_example,
                                      F.data == "skip_example_edit")
 async def skip_example_edit(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
@@ -642,6 +642,7 @@ async def skip_example_edit(callback: CallbackQuery, state: FSMContext, session:
         reply_markup=await confirm_cancel_edit_projects(),
         disable_web_page_preview=True
     )
+    await callback.answer()
     await state.set_state(ProjectEditState.waiting_for_confirmation)
 
 

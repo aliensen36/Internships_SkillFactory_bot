@@ -20,6 +20,7 @@ class ProjectAddState(StatesGroup):
     waiting_for_title = State()
     waiting_for_description = State()
     waiting_for_benefit = State()
+    waiting_for_example = State()
     waiting_for_confirmation = State()
 
 

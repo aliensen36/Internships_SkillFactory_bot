@@ -86,20 +86,31 @@ async def export_projects_to_excel(callback: CallbackQuery, session: AsyncSessio
             await callback.answer("📭 Список проектов пуст", show_alert=True)
             return
 
-        # Создаем DataFrame с нужными полями
+        # Создаем DataFrame со всеми полями модели
         data = {
+            "ID": [],
             "Название": [],
             "Описание": [],
+            "Описание (оригинал)": [],
             "Бенефиты": [],
-            "Примеры": []
+            "Бенефиты (оригинал)": [],
+            "Примеры": [],
+            "Примеры (оригинал)": [],
+            "Дата создания": [],
+            "Дата обновления": []
         }
 
         for project in projects:
+            data["ID"].append(project.id)
             data["Название"].append(project.title)
-            data["Описание"].append(
-                project.raw_description if hasattr(project, 'raw_description') else project.description)
-            data["Бенефиты"].append(project.raw_benefit if hasattr(project, 'raw_benefit') else project.benefit)
-            data["Примеры"].append(project.raw_example if hasattr(project, 'raw_example') else project.example)
+            data["Описание"].append(project.description)
+            data["Описание (оригинал)"].append(project.raw_description)
+            data["Бенефиты"].append(project.benefit)
+            data["Бенефиты (оригинал)"].append(project.raw_benefit)
+            data["Примеры"].append(project.example)
+            data["Примеры (оригинал)"].append(project.raw_example)
+            data["Дата создания"].append(project.created.strftime('%Y-%m-%d %H:%M') if project.created else None)
+            data["Дата обновления"].append(project.updated.strftime('%Y-%m-%d %H:%M') if project.updated else None)
 
         df = pd.DataFrame(data)
 
@@ -110,35 +121,53 @@ async def export_projects_to_excel(callback: CallbackQuery, session: AsyncSessio
             workbook = writer.book
             worksheet = writer.sheets['Проекты']
 
-            # Формат с переносом текста и выравниванием по верхнему левому краю
+            # Формат с переносом текста и выравниванием
             wrap_format = workbook.add_format({
                 'text_wrap': True,
-                'valign': 'top',    # Вертикальное выравнивание по верху
-                'align': 'left'      # Горизонтальное выравнивание по левому краю
+                'valign': 'top',
+                'align': 'left'
             })
 
-            # Формат для заголовков (жирный + выравнивание)
+            # Формат для заголовков
             header_format = workbook.add_format({
                 'bold': True,
                 'valign': 'top',
                 'align': 'left',
-                'text_wrap': True
+                'text_wrap': True,
+                'bg_color': '#D7E4BC'  # Светло-зеленый фон для заголовков
             })
 
-            # Устанавливаем ширину столбцов (в символах)
+            # Формат для дат
+            date_format = workbook.add_format({
+                'num_format': 'yyyy-mm-dd hh:mm',
+                'valign': 'top',
+                'align': 'left'
+            })
+
+            # Устанавливаем ширину столбцов
             column_widths = {
+                "ID": 10,
                 "Название": 30,
-                "Описание": 50,
-                "Бенефиты": 50,
-                "Примеры": 50
+                "Описание": 40,
+                "Описание (оригинал)": 40,
+                "Бенефиты": 40,
+                "Бенефиты (оригинал)": 40,
+                "Примеры": 40,
+                "Примеры (оригинал)": 40,
+                "Дата создания": 20,
+                "Дата обновления": 20
             }
 
             # Применяем настройки к каждому столбцу
             for i, column in enumerate(df.columns):
+                col_format = wrap_format
+                if 'Дата' in column:
+                    col_format = date_format
+
                 worksheet.set_column(
                     i, i,
                     column_widths.get(column, 30),
-                    wrap_format
+                    col_format
                 )
 
             # Устанавливаем формат заголовков
@@ -149,17 +178,23 @@ async def export_projects_to_excel(callback: CallbackQuery, session: AsyncSessio
             for row_num in range(1, len(df) + 1):
                 worksheet.set_row(row_num, None, wrap_format)
 
+            # Добавляем автофильтр
+            worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+
+            # Закрепляем заголовки
+            worksheet.freeze_panes(1, 0)
+
         output.seek(0)
 
         # Отправляем файл пользователю
         await callback.message.answer_document(
             document=BufferedInputFile(output.read(), filename="projects_export.xlsx"),
-            caption="📊 Выгрузка проектов в Excel"
+            caption="📊 Полная выгрузка проектов в Excel"
         )
         await callback.answer()
 
     except Exception as e:
-        logging.error(f"Error in export_projects_to_excel: {e}")
+        logging.error(f"Error in export_projects_to_excel: {e}", exc_info=True)
         await callback.answer("⚠️ Ошибка при выгрузке проектов", show_alert=True)
 
 

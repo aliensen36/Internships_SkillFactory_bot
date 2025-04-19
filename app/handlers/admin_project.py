@@ -1,6 +1,7 @@
 import io
 import logging
 from aiogram import F, Router
+from aiogram.exceptions import AiogramError
 from aiogram.filters import Filter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
@@ -170,11 +171,15 @@ async def export_projects_to_excel(callback: CallbackQuery, session: AsyncSessio
 
 
 @admin_project_router.callback_query(F.data == "projects:add")
-async def add_project_start(callback: CallbackQuery,
-                           state: FSMContext):
-    await state.set_state(ProjectAddState.waiting_for_title)
-    await callback.message.answer("Введите название проекта:")
-    await callback.answer()
+async def add_project_start(callback: CallbackQuery, state: FSMContext):
+    try:
+        await state.set_state(ProjectAddState.waiting_for_title)
+        await callback.message.answer("Введите название проекта:")
+        await callback.answer()
+
+    except Exception as e:
+        logging.error(f"Error in add_project_start: {e}")
+        await callback.answer("⚠️ Произошла ошибка", show_alert=True)
 
 @admin_project_router.message(ProjectAddState.waiting_for_title)
 async def add_project_title(message: Message,
@@ -199,37 +204,82 @@ async def add_project_title(message: Message,
     # Если название уникальное - продолжаем
     await state.update_data(title=message.text)
     await state.set_state(ProjectAddState.waiting_for_description)
-    await message.answer("Введите описание проекта:")
+    await message.answer("Введите описание проекта:",
+                         disable_web_page_preview=True)
 
 
 @admin_project_router.message(ProjectAddState.waiting_for_description)
 async def add_project_description(message: Message,
                                   state: FSMContext,
                                   session: AsyncSession):
-    await state.update_data(description=message.text)
+    # Обрабатываем ссылки в описании (заменяем на "ссылка")
+    processed_description = hide_urls(message.text)
+
+    # Сохраняем оба варианта (с заглушками и оригинал)
+    await state.update_data(
+        description=processed_description,
+        raw_description=message.text  # Сохраняем оригинальный текст без обработки
+    )
+
     await state.set_state(ProjectAddState.waiting_for_benefit)
-    await message.answer("Введите описание бенефитов от участия в проекте:")
+
+    await message.answer(
+        "Введите описание бенефитов от участия в проекте:",
+        disable_web_page_preview=True
+    )
 
 
 @admin_project_router.message(ProjectAddState.waiting_for_benefit)
 async def add_project_benefit(message: Message,
                               state: FSMContext,
                               session: AsyncSession):
-    await state.update_data(benefit=message.text)
-    data = await state.get_data()
+    # Обрабатываем ссылки в описании (заменяем на "ссылка")
+    processed_benefit = hide_urls(message.text)
+
+    # Сохраняем оба варианта (с заглушками и оригинал)
+    await state.update_data(
+        benefit=processed_benefit,
+        raw_benefit=message.text  # Сохраняем оригинальный текст без обработки
+    )
+
+    await state.set_state(ProjectAddState.waiting_for_example)
+
+    await message.answer(
+        "Введите описание примеров успеха:",
+        disable_web_page_preview=True
+    )
+
+@admin_project_router.message(ProjectAddState.waiting_for_example)
+async def add_project_example(message: Message,
+                              state: FSMContext,
+                              session: AsyncSession):
+    # Обрабатываем ссылки в описании (заменяем на "ссылка")
+    processed_example = hide_urls(message.text)
+
+    # Сохраняем оба варианта (с заглушками и оригинал)
+    await state.update_data(
+        example=processed_example,
+        raw_example=message.text  # Сохраняем оригинальный текст без обработки
+    )
+
+    data = await state.get_data()  # Получаем актуальные данные
 
     # Формируем сообщение с предпросмотром данных
     preview_message = (
         "📋 Предпросмотр нового проекта:\n\n"
         f"<b>Название:</b> {data['title']}\n\n"
         f"<b>Описание:</b> {data['description']}\n\n"
-        f"<b>Бенефиты:</b> {message.text}\n\n"
+        f"<b>Бенефиты:</b> {data['benefit']}\n\n"  # Используем обработанные данные
+        f"<b>Примеры:</b> {data['example']}\n\n"   # Используем обработанные данные
         "Подтвердите добавление проекта или отмените:"
     )
 
-    await message.answer(preview_message,
-                         reply_markup = await confirm_cancel_add_projects(),
-                         parse_mode="HTML")
+    await message.answer(
+        preview_message,
+        reply_markup=await confirm_cancel_add_projects(),
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
     await state.set_state(ProjectAddState.waiting_for_confirmation)
 
 
@@ -243,7 +293,11 @@ async def confirm_project_add(callback: CallbackQuery,
     new_project = Project(
         title=data["title"],
         description=data["description"],
-        benefit=data["benefit"]
+        benefit=data["benefit"],
+        example=data.get("example"),
+        raw_description=data.get("raw_description"),
+        raw_benefit=data.get("raw_benefit"),
+        raw_example=data.get("raw_example")
     )
 
     session.add(new_project)

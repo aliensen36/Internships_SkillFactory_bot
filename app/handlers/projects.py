@@ -108,7 +108,8 @@ async def about_project(callback: CallbackQuery, session: AsyncSession,
         await callback.message.edit_text(
             about_text,
             reply_markup=await get_project_details_keyboard(project_id, session),
-            parse_mode="HTML"
+            parse_mode="HTML",
+            disable_web_page_preview=True
             )
         await callback.answer()
         await state.update_data(current_project_id=project_id)
@@ -138,7 +139,8 @@ async def benefits_project(callback: CallbackQuery, session: AsyncSession,
         await callback.message.edit_text(
             about_text,
             reply_markup=await get_project_details_keyboard(project_id, session),
-            parse_mode="HTML"
+            parse_mode="HTML",
+            disable_web_page_preview=True
             )
         await callback.answer()
         await state.update_data(current_project_id=project_id)

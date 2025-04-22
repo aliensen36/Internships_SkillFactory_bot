@@ -13,6 +13,10 @@ from app.keyboards.inline import admin_specializations_menu, confirm_cancel_add_
     confirm_cancel_edit_specializations, admin_main_menu, confirm_delete_specializations
 from app.keyboards.reply import kb_specializations_courses, kb_courses, specializations_keyboard
 from database.models import *
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
+
+
 
 admin_specialization_router = Router()
 admin_specialization_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -124,17 +128,48 @@ async def confirm_add_specialization(callback: CallbackQuery,
                                      session: AsyncSession):
     data = await state.get_data()
 
-    new_specialization = Specialization(
-        name=data["name"]
-    )
+    try:
+        new_specialization = Specialization(
+            name=data["name"]
+        )
 
-    session.add(new_specialization)
-    await session.commit()
+        session.add(new_specialization)
+        await session.commit()
 
-    await callback.message.answer("✅ Новая специализация добавлена!",
-                         reply_markup=await admin_specializations_menu())
-    await callback.answer()
-    await state.clear()
+        await callback.message.answer("✅ Новая специализация добавлена!",
+                                      reply_markup=await admin_specializations_menu())
+
+    except IntegrityError as e:
+        await session.rollback()
+        if "specializations_pkey" in str(e):
+            # Исправленный запрос с использованием text()
+            reset_seq_query = text(
+                "SELECT setval('specializations_id_seq', "
+                "(SELECT MAX(id) FROM specializations))"
+            )
+            await session.execute(reset_seq_query)
+            await session.commit()
+            await callback.message.answer(
+                "⚠️ Обнаружена проблема с нумерацией. Попробуйте еще раз.",
+                reply_markup=await admin_specializations_menu()
+            )
+        else:
+            await callback.message.answer(
+                "⚠️ Такая специализация уже существует",
+                reply_markup=await admin_specializations_menu()
+            )
+
+    except Exception as e:
+        await session.rollback()
+        logging.error(f"Ошибка при добавлении специализации: {e}", exc_info=True)
+        await callback.message.answer(
+            "⚠️ Неизвестная ошибка при добавлении",
+            reply_markup=await admin_specializations_menu()
+        )
+
+    finally:
+        await callback.answer()
+        await state.clear()
 
 
 @admin_specialization_router.callback_query(F.data == "cancel_add_specialization")

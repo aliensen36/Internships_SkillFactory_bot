@@ -345,7 +345,7 @@ async def confirm_project_add(callback: CallbackQuery,
 
 
 @admin_project_router.callback_query(F.data == "cancel_add_project")
-async def confirm_project_add(callback: CallbackQuery,
+async def cancel_project_add(callback: CallbackQuery,
                               state: FSMContext):
     await callback.message.answer("❌ Добавление проекта отменено.",
                                   reply_markup=await admin_projects_menu())

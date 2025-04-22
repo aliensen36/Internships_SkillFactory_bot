@@ -1,5 +1,4 @@
 import logging
-
 from aiogram import Router, F
 from aiogram.filters import StateFilter, Filter
 from aiogram.fsm.context import FSMContext
@@ -15,6 +14,15 @@ from app.keyboards.inline import admin_courses_menu, confirm_cancel_add_courses,
 from database.models import *
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from io import BytesIO
+import pandas as pd
+from aiogram.types import FSInputFile
+from sqlalchemy.orm import selectinload
+import tempfile
+import os
+from aiogram.types import BufferedInputFile
+
+
 
 
 
@@ -76,6 +84,69 @@ async def view_courses(callback: CallbackQuery,
         logging.error(f"Error in view_courses: {e}")
 
 
+# Обработчик выгрузки в Excel
+@admin_course_router.callback_query(F.data == "courses:export")
+async def export_courses_to_excel(callback: CallbackQuery, session: AsyncSession):
+    try:
+        await callback.answer("⏳ Формируем файл...")
+
+        # Получаем данные из БД
+        result = await session.execute(
+            select(Course)
+            .options(selectinload(Course.specialization))
+            .order_by(Course.specialization_id, Course.id)
+        )
+        courses = result.scalars().all()
+
+        if not courses:
+            await callback.message.answer("❗ Нет курсов для выгрузки")
+            return
+
+        # Подготавливаем данные для Excel
+        data = []
+        for course in courses:
+            data.append({
+                "ID": course.id,
+                "Название курса": course.name,
+                "Специализация": course.specialization.name if course.specialization else "Не указана",
+                "ID специализации": course.specialization_id
+            })
+
+        # Создаем DataFrame
+        df = pd.DataFrame(data)
+
+        # Создаем временный файл
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            with pd.ExcelWriter(tmp.name, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='Курсы')
+
+                # Настраиваем форматирование
+                worksheet = writer.sheets['Курсы']
+                for idx, col in enumerate(df.columns):
+                    max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                    worksheet.set_column(idx, idx, max_len)
+
+            # Читаем файл обратно в память
+            tmp.seek(0)
+            excel_data = tmp.read()
+
+        # Создаем BufferedInputFile
+        excel_file = BufferedInputFile(excel_data, filename="courses_export.xlsx")
+
+        # Отправляем файл пользователю
+        await callback.message.answer_document(
+            document=excel_file,
+            caption=f"📊 Выгрузка курсов ({len(courses)} записей)"
+        )
+
+    except Exception as e:
+        logging.error(f"Ошибка при выгрузке курсов в Excel: {e}", exc_info=True)
+        await callback.message.answer("⚠️ Произошла ошибка при формировании файла")
+    finally:
+        # Удаляем временный файл
+        if 'tmp' in locals() and os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+        await callback.answer()
 
 
 # =====================================================================================

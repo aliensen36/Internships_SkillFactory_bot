@@ -427,12 +427,14 @@ async def admin_courses_menu():
                              callback_data="courses:edit"),
         InlineKeyboardButton(text="Удалить",
                              callback_data="courses:delete"),
+        InlineKeyboardButton(text="Выгрузить в Excel",
+                             callback_data="courses:export"),
         InlineKeyboardButton(text="⬅️ Назад",
                              callback_data="courses:admin_main_menu")
     ]
 
     builder.add(*buttons)
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2, 2)
 
     return builder.as_markup()
 

@@ -13,6 +13,10 @@ from app.fsm_states import *
 from app.keyboards.inline import admin_courses_menu, confirm_cancel_add_courses, confirm_cancel_edit_courses, \
     admin_main_menu, confirm_delete_courses
 from database.models import *
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+
+
 
 admin_course_router = Router()
 admin_course_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
@@ -208,11 +212,47 @@ async def confirm_add_course(callback: CallbackQuery,
             parse_mode="HTML",
             reply_markup=await admin_courses_menu()
         )
+
+    except IntegrityError as e:
+        await session.rollback()
+
+        if "courses_pkey" in str(e):
+            # Автоматически исправляем последовательность
+            try:
+                reset_query = text(
+                    "SELECT setval('courses_id_seq', "
+                    "(SELECT MAX(id) FROM courses))"
+                )
+                await session.execute(reset_query)
+                await session.commit()
+                await callback.message.answer(
+                    "⚠️ Проблема с нумерацией курсов исправлена. Попробуйте добавить курс снова.",
+                    reply_markup=await admin_courses_menu()
+                )
+            except Exception as reset_error:
+                logging.error(f"Ошибка сброса последовательности: {reset_error}")
+                await callback.message.answer(
+                    "⚠️ Критическая ошибка. Обратитесь к администратору.",
+                    reply_markup=await admin_courses_menu()
+                )
+
+        elif "unique constraint" in str(e).lower():
+            await callback.message.answer(
+                "⚠️ Курс с таким названием уже существует",
+                reply_markup=await admin_courses_menu()
+            )
+
     except Exception as e:
-        await callback.message.answer(f"⚠️ Произошла ошибка при добавлении курса: {str(e)}")
+        await session.rollback()
+        logging.error(f"Ошибка добавления курса: {e}", exc_info=True)
+        await callback.message.answer(
+            "⚠️ Неизвестная ошибка при добавлении курса",
+            reply_markup=await admin_courses_menu()
+        )
+
     finally:
-        await state.clear()
         await callback.answer()
+        await state.clear()
 
 
 @admin_course_router.callback_query(F.data == "cancel_add_course")

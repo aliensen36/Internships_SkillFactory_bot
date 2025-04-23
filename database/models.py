@@ -116,6 +116,7 @@ class Broadcast(Base):
         ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True
     )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     project: Mapped[Optional["Project"]] = relationship(
         back_populates="broadcasts"

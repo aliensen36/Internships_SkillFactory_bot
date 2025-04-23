@@ -15,6 +15,10 @@ class BroadcastState(StatesGroup):
     confirmation = State()
 
 
+class MailingState(StatesGroup):
+    waiting_for_mailing_id = State()
+
+
 class ProjectAddState(StatesGroup):
     waiting_for_action = State()
     waiting_for_title = State()

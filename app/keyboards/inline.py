@@ -490,6 +490,27 @@ async def confirm_delete_courses():
 
 
 
+# Главное меню управления рассылками
+async def admin_broadcast_menu():
+    builder = InlineKeyboardBuilder()
+
+    buttons = [
+        InlineKeyboardButton(
+            text="Новая рассылка",
+            callback_data="broadcasts:new_mailing"),
+        InlineKeyboardButton(
+            text="Статусы рассылок",
+            callback_data="broadcasts:mailing_status"),
+        InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="broadcasts:admin_main_menu")
+    ]
+
+    builder.add(*buttons)
+    builder.adjust(1, 1, 1)
+
+    return builder.as_markup()
+
 
 # Курсы
 async def bc_courses_keyboard(

@@ -24,8 +24,6 @@ from aiogram.types import BufferedInputFile
 
 
 
-
-
 admin_course_router = Router()
 admin_course_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
 
@@ -147,6 +145,7 @@ async def export_courses_to_excel(callback: CallbackQuery, session: AsyncSession
         if 'tmp' in locals() and os.path.exists(tmp.name):
             os.unlink(tmp.name)
         await callback.answer()
+
 
 
 # =====================================================================================
@@ -563,8 +562,6 @@ async def cancel_edit_course(callback: CallbackQuery,
 
 
 
-
-
 # =====================================================================================
 # --------------------------------------- Удалить курс --------------------------------
 # =====================================================================================
@@ -603,6 +600,7 @@ async def delete_course_start(callback: CallbackQuery,
         await callback.message.answer("⚠️ Ошибка при загрузке специализаций")
         logging.error(f"Error in delete_course_start: {e}")
 
+
 @admin_course_router.callback_query(F.data.startswith("delete_spec_"),
                                    CourseDeleteState.waiting_for_specialization)
 async def select_specialization(callback: CallbackQuery,
@@ -638,6 +636,7 @@ async def select_specialization(callback: CallbackQuery,
     )
     await callback.answer()
 
+
 @admin_course_router.callback_query(F.data == "delete_back_to_specs",
                                    CourseDeleteState.waiting_for_course)
 async def back_to_specializations(callback: CallbackQuery,
@@ -661,6 +660,7 @@ async def back_to_specializations(callback: CallbackQuery,
         parse_mode="HTML"
     )
     await callback.answer()
+
 
 @admin_course_router.callback_query(F.data.startswith("delete_course_"),
                                    CourseDeleteState.waiting_for_course)
@@ -686,6 +686,7 @@ async def confirm_course_delete(callback: CallbackQuery,
     )
     await callback.answer()
 
+
 @admin_course_router.callback_query(F.data == "delete_сourses:cancel",
                                    StateFilter(CourseDeleteState))
 async def cancel_deletion(callback: CallbackQuery,
@@ -697,6 +698,7 @@ async def cancel_deletion(callback: CallbackQuery,
         reply_markup=await admin_courses_menu()
     )
     await callback.answer()
+
 
 @admin_course_router.callback_query(F.data == "delete_сourses:confirm",
                                    CourseDeleteState.waiting_for_confirmation)
@@ -733,7 +735,6 @@ async def process_course_deletion(callback: CallbackQuery,
     finally:
         await state.clear()
         await callback.answer()
-
 
 
 

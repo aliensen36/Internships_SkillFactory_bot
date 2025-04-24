@@ -225,6 +225,7 @@ async def show_available_broadcasts(callback: CallbackQuery,
             .where(
                 Broadcast.project_id == project_id,
                 Broadcast.is_sent == True,
+                Broadcast.is_active == True,
                 BroadcastCourseAssociation.course_id == user.course_id
             )
             .order_by(Broadcast.id.desc())

@@ -17,7 +17,7 @@ import time
 from collections import defaultdict
 from app.fsm_states import BroadcastState, MailingState
 from app.keyboards.inline import (projects_keyboard, bc_courses_keyboard,
-                                  admin_main_menu, add_back_button, admin_broadcast_menu)
+                                  admin_main_menu, add_back_button, admin_broadcast_menu, mailing_status_keyboard)
 from app.keyboards.reply import kb_admin_main
 from database.models import User, Specialization, Course, Broadcast, Project, BroadcastCourseAssociation
 import logging
@@ -740,47 +740,13 @@ async def handle_back_button(callback: CallbackQuery, state: FSMContext, session
 
 @admin_broadcast_router.callback_query(F.data == "broadcasts:mailing_status")
 async def mailing_statuses_handler(callback: CallbackQuery):
-    builder = InlineKeyboardBuilder()
-
-    builder.row(
-        InlineKeyboardButton(
-            text="Активные рассылки",
-            callback_data="active_mailings"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="В архиве",
-            callback_data="archived_mailings"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="Изменить статус",
-            callback_data="change_mailing_status"
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад",
-            callback_data="back_to_broadcast_menu"
-        )
-    )
+    keyboard = await mailing_status_keyboard()
 
     await callback.message.edit_text(
         text="<b>Управление статусами рассылок</b>\n\n"
              "Выбери действие:",
         parse_mode="HTML",
-        reply_markup=builder.as_markup()
-    )
-    await callback.answer()
-
-
-@admin_broadcast_router.callback_query(F.data == "back_to_broadcast_menu")
-async def back_to_broadcast_menu(callback: CallbackQuery):
-    await callback.message.edit_text(
-        text="Управление рассылками",
-        reply_markup=await admin_broadcast_menu()
+        reply_markup=keyboard
     )
     await callback.answer()
 
@@ -818,10 +784,12 @@ async def show_active_mailings(callback: CallbackQuery, session: AsyncSession):
         message_text = f"<b>Активные рассылки (страница {page + 1}):</b>\n\n"
         for mailing in mailings:
             created_date = mailing.created.strftime("%d.%m.%Y %H:%M")
+            status = "✅ Активна" if mailing.is_active else "⛔ В архиве"
             message_text += (
                 f"<b>ID:</b> {mailing.id}\n"
                 f"<b>Дата:</b> {created_date}\n"
-                f"<b>Текст:</b> {mailing.text[:100]}...\n\n"
+                f"<b>Статус:</b> {status}\n"
+                f"<b>Текст:</b> {mailing.text[:250]}...\n\n"
             )
 
             builder.row(
@@ -870,49 +838,80 @@ async def show_active_mailings(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("⚠️ Произошла ошибка", show_alert=True)
 
 
-# Хендлер для показа архивных рассылок
-@admin_broadcast_router.callback_query(F.data == "archived_mailings")
+# Хендлер для показа архивных рассылок с пагинацией
+@admin_broadcast_router.callback_query(F.data.startswith("archived_mailings"))
 async def show_archived_mailings(callback: CallbackQuery, session: AsyncSession):
     try:
-        # Получаем архивные рассылки из БД (где is_active == False)
+        # Парсим параметры пагинации
+        page = int(callback.data.split(":")[1]) if ":" in callback.data else 0
+
+        # Получаем общее количество архивных рассылок
+        total_count = await session.scalar(
+            select(func.count(Broadcast.id))
+            .where(Broadcast.is_active == False)
+        )
+
+        # Получаем рассылки для текущей страницы
         result = await session.execute(
             select(Broadcast)
             .where(Broadcast.is_active == False)
             .order_by(Broadcast.created.desc())
-            .limit(10)
+            .offset(page * 5)
+            .limit(5)
         )
-        archived_mailings = result.scalars().all()
+        mailings = result.scalars().all()
 
-        if not archived_mailings:
+        if not mailings:
             await callback.answer("ℹ️ В архиве нет рассылок", show_alert=True)
             return
 
         builder = InlineKeyboardBuilder()
 
-        # Формируем сообщение с информацией о рассылках
-        message_text = "<b>Архивные рассылки</b>\n\n"
-        for mailing in archived_mailings:
+        # Формируем сообщение
+        message_text = f"<b>Архивные рассылки (страница {page + 1}):</b>\n\n"
+        for mailing in mailings:
             created_date = mailing.created.strftime("%d.%m.%Y %H:%M")
+            status = "✅ Активна" if mailing.is_active else "⛔ В архиве"
 
             message_text += (
                 f"<b>ID:</b> {mailing.id}\n"
                 f"<b>Дата:</b> {created_date}\n"
+                f"<b>Статус:</b> {status}\n"
                 f"<b>Текст:</b> {mailing.text[:250]}...\n\n"
             )
 
-            # Добавляем кнопку для каждой рассылки
             builder.row(
                 InlineKeyboardButton(
                     text=f"ID {mailing.id}",
-                    callback_data=f"mailing_detail_{mailing.id}"
+                    callback_data=f"mailing_detail:{mailing.id}"
                 )
             )
 
-        # Добавляем кнопку возврата
+        # Кнопки пагинации
+        pagination_buttons = []
+        if page > 0:
+            pagination_buttons.append(
+                InlineKeyboardButton(
+                    text="◀️ Назад",
+                    callback_data=f"archived_mailings:{page - 1}"
+                )
+            )
+        if (page + 1) * 5 < total_count:
+            pagination_buttons.append(
+                InlineKeyboardButton(
+                    text="Вперед ▶️",
+                    callback_data=f"archived_mailings:{page + 1}"
+                )
+            )
+
+        if pagination_buttons:
+            builder.row(*pagination_buttons)
+
+        # Кнопка возврата
         builder.row(
             InlineKeyboardButton(
-                text="⬅️ Назад",
-                callback_data="mailing_statuses"
+                text="⬅️ Назад в меню статусов",
+                callback_data="broadcasts:mailing_status"
             )
         )
 
@@ -929,63 +928,69 @@ async def show_archived_mailings(callback: CallbackQuery, session: AsyncSession)
 
 # Хендлер для изменения статуса рассылки
 @admin_broadcast_router.callback_query(F.data == "change_mailing_status")
-async def change_mailing_status_start(callback: CallbackQuery):
+async def change_mailing_status_start(callback: CallbackQuery,
+                                      session: AsyncSession,
+                                      state: FSMContext):
     builder = InlineKeyboardBuilder()
-
     builder.row(
         InlineKeyboardButton(
-            text="🔍 Выбрать по ID",
-            callback_data="select_mailing_by_id"
-        )
-    )
-
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад",
-            callback_data="mailing_statuses"
+            text="❌ Отмена",
+            callback_data="cancel_mailing_status"  # Исправленный callback_data
         )
     )
 
     await callback.message.edit_text(
-        text="🔄 <b>Изменение статуса рассылки по её ID</b>\n\n"
-             "введи ID рассылки",
+        text="🔄 <b>Изменение статуса рассылки</b>\n\n"
+             "Введите ID рассылки:",
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
-
-
-# Хендлер для возврата в предыдущее меню
-@admin_broadcast_router.callback_query(F.data == "back_to_broadcast_menu")
-async def back_to_broadcast_menu(callback: CallbackQuery):
-    builder = InlineKeyboardBuilder()
-
-    builder.row(
-        InlineKeyboardButton(
-            text="✉️ Создать рассылку",
-            callback_data="create_broadcast"
-        )
-    )
-
-    builder.row(
-        InlineKeyboardButton(
-            text="📊 Статусы рассылок",
-            callback_data="mailing_statuses"
-        )
-    )
-
-    await callback.message.edit_text(
-        text="<b>Меню управления рассылками</b>\n\n"
-             "Выбери действие:",
-        parse_mode="HTML",
-        reply_markup=builder.as_markup()
-    )
-
+    await state.set_state(MailingState.waiting_for_mailing_id)
     await callback.answer()
 
 
-@admin_broadcast_router.callback_query(F.data.startswith("mailing_detail_"))
+@admin_broadcast_router.callback_query(F.data == "cancel_mailing_status")
+async def cancel_mailing_status(callback: CallbackQuery, state: FSMContext):
+    try:
+        # Очищаем состояние
+        await state.clear()
+        keyboard = await mailing_status_keyboard()
+
+        # Возвращаемся в меню статусов рассылок
+        await callback.message.edit_text(
+            text="<b>Управление статусами рассылок</b>\n\n"
+                 "Выбери действие:",
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_mailing_status: {e}")
+        await callback.answer("⚠️ Произошла ошибка", show_alert=True)
+
+
+@admin_broadcast_router.callback_query(F.data == "status:back_to_broadcast_menu")
+async def back_to_broadcast_menu(callback: CallbackQuery):
+    try:
+        # Получаем клавиатуру главного меню рассылок
+        markup = await admin_broadcast_menu()
+
+        await callback.message.edit_text(
+            text="📨 <b>Меню управления рассылками</b>\n\n"
+                 "Выберите действие:",
+            parse_mode="HTML",
+            reply_markup=markup
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Ошибка в back_to_broadcast_menu: {e}")
+        await callback.answer("⚠️ Произошла ошибка", show_alert=True)
+
+
+@admin_broadcast_router.callback_query(F.data.startswith("mailing_detail:"))
 async def mailing_detail(callback: CallbackQuery, session: AsyncSession):
-    mailing_id = int(callback.data.split("_")[-1])
+    mailing_id = int(callback.data.split(":")[-1])
 
     # Получаем информацию о рассылке
     result = await session.execute(
@@ -1004,38 +1009,40 @@ async def mailing_detail(callback: CallbackQuery, session: AsyncSession):
         builder.row(
             InlineKeyboardButton(
                 text="⛔ В архив",
-                callback_data=f"deactivate_mailing_{mailing.id}"
+                callback_data=f"deactivate_mailing:{mailing.id}"
             )
         )
     else:
         builder.row(
             InlineKeyboardButton(
                 text="✅ Активировать",
-                callback_data=f"activate_mailing_{mailing.id}"
+                callback_data=f"activate_mailing:{mailing.id}"
             )
         )
 
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад",
-            callback_data="active_mailings"
+            callback_data="broadcasts:mailing_status"
         )
     )
 
     created_date = mailing.created.strftime("%d.%m.%Y %H:%M")
+    status = "✅ Активна" if mailing.is_active else "⛔ В архиве"
 
     await callback.message.edit_text(
         text=f"<b>Рассылка ID {mailing.id}</b>\n\n"
              f"<b>Дата:</b> {created_date}\n"
+             f"<b>Статус:</b> {status}\n"
              f"<b>Текст:</b>\n{mailing.text[:250]}",
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
 
 
-@admin_broadcast_router.callback_query(F.data.startswith("activate_mailing_"))
+@admin_broadcast_router.callback_query(F.data.startswith("activate_mailing:"))
 async def activate_mailing(callback: CallbackQuery, session: AsyncSession):
-    mailing_id = int(callback.data.split("_")[-1])
+    mailing_id = int(callback.data.split(":")[-1])
 
     await session.execute(
         update(Broadcast)
@@ -1048,9 +1055,9 @@ async def activate_mailing(callback: CallbackQuery, session: AsyncSession):
     await mailing_detail(callback, session)  # Обновляем сообщение
 
 
-@admin_broadcast_router.callback_query(F.data.startswith("deactivate_mailing_"))
+@admin_broadcast_router.callback_query(F.data.startswith("deactivate_mailing:"))
 async def deactivate_mailing(callback: CallbackQuery, session: AsyncSession):
-    mailing_id = int(callback.data.split("_")[-1])
+    mailing_id = int(callback.data.split(":")[-1])
 
     await session.execute(
         update(Broadcast)
@@ -1061,17 +1068,6 @@ async def deactivate_mailing(callback: CallbackQuery, session: AsyncSession):
 
     await callback.answer("⛔ Рассылка отправлена в архив")
     await mailing_detail(callback, session)  # Обновляем сообщение
-
-
-@admin_broadcast_router.callback_query(F.data == "select_mailing_by_id")
-async def select_mailing_by_id(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(
-        text="🔢 Введи ID рассылки:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="change_mailing_status")]
-        ])
-    )
-    await state.set_state(MailingState.waiting_for_mailing_id)
 
 
 @admin_broadcast_router.message(MailingState.waiting_for_mailing_id)
@@ -1105,16 +1101,18 @@ async def process_mailing_id(message: Message, state: FSMContext, session: Async
         if mailing.is_active:
             builder.row(InlineKeyboardButton(
                 text="⛔ В архив",
-                callback_data=f"deactivate_mailing_{mailing.id}"
+                callback_data=f"deactivate_mailing:{mailing.id}"
             ))
         else:
             builder.row(InlineKeyboardButton(
                 text="✅ Активировать",
-                callback_data=f"activate_mailing_{mailing.id}"
+                callback_data=f"activate_mailing:{mailing.id}"
             ))
+
+        # Кнопка "Назад" возвращает в меню статусов рассылок
         builder.row(InlineKeyboardButton(
-            text="⬅️ Назад",
-            callback_data="active_mailings"
+            text="⬅️ Назад в меню статусов",
+            callback_data="broadcasts:mailing_status"
         ))
 
         # Отправляем новое сообщение с деталями

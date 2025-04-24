@@ -610,5 +610,38 @@ async def projects_keyboard(session: AsyncSession):
     return builder
 
 
+async def mailing_status_keyboard() -> InlineKeyboardMarkup:
+    """
+    Создает клавиатуру для управления статусами рассылок.
 
+    Returns:
+        InlineKeyboardMarkup: Объект клавиатуры
+    """
+    builder = InlineKeyboardBuilder()
 
+    builder.row(
+        InlineKeyboardButton(
+            text="Активные рассылки",
+            callback_data="active_mailings"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="В архиве",
+            callback_data="archived_mailings"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="Изменить статус",
+            callback_data="change_mailing_status"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data="status:back_to_broadcast_menu"
+        )
+    )
+
+    return builder.as_markup()

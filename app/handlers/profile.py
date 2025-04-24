@@ -1,13 +1,13 @@
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.fsm_states import ChangeCourseState
 from app.keyboards.inline import *
-from app.keyboards.reply import kb_profile, kb_main
+from app.keyboards.reply import kb_main
 from database.models import *
 from aiogram.exceptions import TelegramBadRequest
 
@@ -172,30 +172,6 @@ async def change_course(callback: CallbackQuery, state: FSMContext,
     await state.clear()
 
 
-# @profile_router.message(F.text == "Назад")
-# async def back_to_main_menu(message: Message, state: FSMContext, session: AsyncSession):
-#     # Проверяем, есть ли незавершенный процесс изменения курса
-#     current_state = await state.get_state()
-#     if current_state == ChangeCourseState.waiting_for_course:
-#         # Восстанавливаем старые значения
-#         state_data = await state.get_data()
-#         old_spec_id = state_data.get('old_spec_id')
-#         old_course_id = state_data.get('old_course_id')
-#
-#         stmt = select(User).where(User.tg_id == message.from_user.id)
-#         result = await session.execute(stmt)
-#         user = result.scalar_one_or_none()
-#
-#         if user:
-#             # Восстанавливаем только если пользователь не завершил выбор курса
-#             user.specialization_id = old_spec_id
-#             user.course_id = old_course_id
-#             await session.commit()
-#
-#     await state.clear()
-#     await message.answer("Выбери действие", reply_markup=kb_main)
-
-
 # Пагинация при изменении курса
 @profile_router.callback_query(F.data.startswith("changepage_"))
 async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
@@ -217,181 +193,223 @@ async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
 
 # Все доступные мероприятия курса
 @profile_router.callback_query(F.data.startswith("view_course_events_"))
-async def view_course_events(callback: CallbackQuery, session: AsyncSession):
+async def show_course_broadcasts(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     try:
-        # Получаем ID курса из callback данных
         course_id = int(callback.data.split("_")[-1])
 
-        async with session.begin():
-            # Проверяем существование курса
-            course = await session.get(Course, course_id)
-            if not course:
-                await callback.answer("❌ Курс не найден", show_alert=True)
-                return
+        # Получаем курс
+        course = await session.get(Course, course_id)
+        if not course:
+            await callback.answer("Курс не найден", show_alert=True)
+            return
 
-            # Получаем ВСЕ активные рассылки для этого курса
-            stmt = (
-                select(Broadcast)
-                .join(Broadcast.course_associations)
-                .options(selectinload(Broadcast.project))
-                .where(
-                    Broadcast.is_sent == True,
-                    Broadcast.is_active == True,
-                    BroadcastCourseAssociation.course_id == course_id
-                )
-                .order_by(Broadcast.created.desc())
+        # Получаем рассылки для курса
+        stmt = (
+            select(Broadcast)
+            .join(Broadcast.course_associations)
+            .where(
+                Broadcast.is_sent == True,
+                Broadcast.is_active == True,
+                BroadcastCourseAssociation.course_id == course_id
+            )
+            .order_by(Broadcast.id.desc())
+        )
+        broadcasts_list = (await session.scalars(stmt)).all()
+
+        if not broadcasts_list:
+            await callback.answer("Нет доступных мероприятий для этого курса", show_alert=True)
+            return
+
+        # Отправляем первую рассылку и сохраняем сообщения
+        new_messages = await send_broadcast_with_pagination(
+            callback=callback,
+            broadcasts=broadcasts_list,
+            index=0,
+            course_id=course_id,
+            total=len(broadcasts_list),
+            last_messages=[]  # Пустой список для первого сообщения
+        )
+
+        # Сохраняем состояние
+        await state.update_data(
+            last_messages=new_messages,
+            current_index=0,
+            broadcasts_list=broadcasts_list,
+            course_id=course_id
+        )
+
+    except Exception as e:
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+
+async def send_broadcast_with_pagination(
+        callback: CallbackQuery,
+        broadcasts: list[Broadcast],
+        index: int,
+        course_id: int,
+        total: int,
+        last_messages: list[int] = None
+):
+    """Функция пагинации для курсовых рассылок"""
+    try:
+        if index < 0 or index >= len(broadcasts):
+            await callback.answer("Недопустимый индекс рассылки", show_alert=True)
+            return
+
+        # Удаляем предыдущие сообщения (и фото, и текст)
+        if last_messages:
+            for msg_id in last_messages:
+                try:
+                    await callback.message.bot.delete_message(
+                        chat_id=callback.message.chat.id,
+                        message_id=msg_id
+                    )
+                except Exception as e:
+                    await callback.message.answer(f"Не удалось удалить сообщение {msg_id}: {e}")
+
+        broadcast = broadcasts[index]
+        pagination_text = f"<b>Мероприятие {index + 1} из {total}</b>"
+        main_text = broadcast.text
+        full_text = f"{main_text}\n\n{pagination_text}"
+
+        # Создаем клавиатуру пагинации
+        builder = InlineKeyboardBuilder()
+        if index > 0:
+            builder.button(
+                text="⬅️ Назад",
+                callback_data=f"prev_course_broadcast_{course_id}_{index}"
+            )
+        if index < total - 1:
+            builder.button(
+                text="➡️ Вперед",
+                callback_data=f"next_course_broadcast_{course_id}_{index}"
             )
 
-            broadcasts = (await session.scalars(stmt)).all()
+        builder.adjust(2)
+        markup = builder.as_markup()
 
-            if not broadcasts:
-                await callback.answer("📭 Нет доступных мероприятий для вашего курса", show_alert=True)
-                return
+        # Список для хранения ID всех отправленных сообщений
+        current_messages = []
 
-            # Создаем клавиатуру с рассылками
-            builder = InlineKeyboardBuilder()
+        # Отправляем контент
+        if broadcast.image_path:
+            try:
+                photo = FSInputFile(broadcast.image_path) if os.path.exists(
+                    broadcast.image_path) else broadcast.image_path
 
-            for broadcast in broadcasts:
-                # Формируем текст кнопки (только первые 40 символов текста)
-                if broadcast.text:
-                    text_preview = broadcast.text[:40].strip()
-                    # Добавляем многоточие только если текст был обрезан
-                    if len(broadcast.text) > 40:
-                        text_preview += "..."
+                if len(full_text) <= 1024:
+                    msg = await callback.message.bot.send_photo(
+                        chat_id=callback.message.chat.id,
+                        photo=photo,
+                        caption=full_text,
+                        reply_markup=markup,
+                        parse_mode="HTML"
+                    )
+                    current_messages.append(msg.message_id)
                 else:
-                    text_preview = "Нет описания"
-
-                builder.row(
-                    InlineKeyboardButton(
-                        text=text_preview,
-                        callback_data=f"view_broadcast_{broadcast.id}"
+                    photo_msg = await callback.message.bot.send_photo(
+                        chat_id=callback.message.chat.id,
+                        photo=photo
                     )
+                    current_messages.append(photo_msg.message_id)
+
+                    text_msg = await callback.message.bot.send_message(
+                        chat_id=callback.message.chat.id,
+                        text=full_text,
+                        reply_markup=markup,
+                        disable_web_page_preview=True,
+                        parse_mode="HTML"
+                    )
+                    current_messages.append(text_msg.message_id)
+            except Exception as e:
+                error_msg = await callback.message.bot.send_message(
+                    chat_id=callback.message.chat.id,
+                    text=f"⚠️ Не удалось загрузить изображение\n\n{full_text}",
+                    reply_markup=markup,
+                    disable_web_page_preview=True,
+                    parse_mode="HTML"
                 )
-
-            await callback.message.edit_text(
-                f"📅 Доступные мероприятия по курсу <b>{course.name}</b>:",
-                parse_mode="HTML",
-                reply_markup=builder.as_markup()
+                current_messages.append(error_msg.message_id)
+        else:
+            msg = await callback.message.bot.send_message(
+                chat_id=callback.message.chat.id,
+                text=full_text,
+                reply_markup=markup,
+                disable_web_page_preview=True,
+                parse_mode="HTML"
             )
+            current_messages.append(msg.message_id)
 
-    except ValueError:
-        await callback.answer("❌ Ошибка: некорректный ID курса", show_alert=True)
+        return current_messages
+
     except Exception as e:
-        print(f"Ошибка в view_course_events: {str(e)}")
-        await callback.answer("⚠️ Произошла ошибка при загрузке мероприятий", show_alert=True)
+        await callback.answer("Ошибка при отображении рассылки", show_alert=True)
+        return []
+    finally:
+        await callback.answer()
 
 
-@profile_router.callback_query(F.data.startswith("view_broadcast_"))
-async def show_broadcast_details(callback: CallbackQuery, session: AsyncSession):
+@profile_router.callback_query(F.data.startswith("prev_course_broadcast_"))
+async def prev_course_broadcast(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     try:
-        broadcast_id = int(callback.data.split("_")[-1])
+        data = await state.get_data()
+        last_messages = data.get("last_messages", [])
+        current_index = data.get("current_index", 0)
+        broadcasts_list = data.get("broadcasts_list", [])
+        course_id = data.get("course_id")
 
-        async with session.begin():
-            # Получаем рассылку с загрузкой связанных данных
-            broadcast = await session.get(
-                Broadcast,
-                broadcast_id,
-                options=[
-                    selectinload(Broadcast.project),
-                    selectinload(Broadcast.course_associations)
-                ]
-            )
+        if not broadcasts_list:
+            await callback.answer("Нет доступных рассылок", show_alert=True)
+            return
 
-            if not broadcast:
-                await callback.answer("❌ Рассылка не найдена", show_alert=True)
-                return
+        new_index = max(0, current_index - 1)
 
-            # Получаем ID курса для кнопки "Назад"
-            course_id = broadcast.course_associations[0].course_id if broadcast.course_associations else None
+        new_messages = await send_broadcast_with_pagination(
+            callback=callback,
+            broadcasts=broadcasts_list,
+            index=new_index,
+            course_id=course_id,
+            total=len(broadcasts_list),
+            last_messages=last_messages
+        )
 
-            # Формируем текст сообщения
-            message_text = []
-
-            # Добавляем заголовок (если есть проект)
-            if broadcast.project:
-                message_text.append(f"<b>Проект: {broadcast.project.title}</b>\n\n")
-
-            # Добавляем дату создания
-            message_text.append(f"Дата: {broadcast.created.strftime('%d.%m.%Y %H:%M')}\n\n")
-
-            # Добавляем основной текст
-            message_text.append(broadcast.text if broadcast.text else "Описание отсутствует")
-
-            # Создаем клавиатуру
-            builder = InlineKeyboardBuilder()
-
-            # Кнопка "Назад к списку"
-            if course_id:
-                builder.row(
-                    InlineKeyboardButton(
-                        text="⬅️ Назад к списку",
-                        callback_data=f"view_course_events_{course_id}"
-                    )
-                )
-
-            # Отправляем сообщение
-            await callback.message.edit_text(
-                text="".join(message_text),
-                parse_mode="HTML",
-                reply_markup=builder.as_markup(),
-                disable_web_page_preview=True
-            )
+        await state.update_data(
+            last_messages=new_messages,
+            current_index=new_index
+        )
 
     except Exception as e:
-        print(f"Ошибка в show_broadcast_details: {str(e)}")
-        await callback.answer("⚠️ Ошибка при загрузке рассылки", show_alert=True)
+        await callback.answer("Ошибка при загрузке", show_alert=True)
 
 
-@profile_router.callback_query(F.data.startswith("view_course_events_"))
-async def back_to_broadcasts_list(callback: CallbackQuery, session: AsyncSession):
+@profile_router.callback_query(F.data.startswith("next_course_broadcast_"))
+async def next_course_broadcast(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     try:
-        # Получаем ID курса из callback данных
-        course_id = int(callback.data.split("_")[-1])
+        data = await state.get_data()
+        last_messages = data.get("last_messages", [])
+        current_index = data.get("current_index", 0)
+        broadcasts_list = data.get("broadcasts_list", [])
+        course_id = data.get("course_id")
 
-        async with session.begin():
-            # Проверяем существование курса
-            course = await session.get(Course, course_id)
-            if not course:
-                await callback.answer("❌ Курс не найден", show_alert=True)
-                return
+        if not broadcasts_list:
+            await callback.answer("Нет доступных рассылок", show_alert=True)
+            return
 
-            # Получаем активные рассылки для этого курса
-            stmt = (
-                select(Broadcast)
-                .join(Broadcast.course_associations)
-                .options(selectinload(Broadcast.project))
-                .where(
-                    Broadcast.is_sent == True,
-                    Broadcast.is_active == True,
-                    BroadcastCourseAssociation.course_id == course_id
-                )
-                .order_by(Broadcast.created.desc())
-            )
+        new_index = min(len(broadcasts_list) - 1, current_index + 1)
 
-            broadcasts = (await session.scalars(stmt)).all()
+        new_messages = await send_broadcast_with_pagination(
+            callback=callback,
+            broadcasts=broadcasts_list,
+            index=new_index,
+            course_id=course_id,
+            total=len(broadcasts_list),
+            last_messages=last_messages
+        )
 
-            if not broadcasts:
-                await callback.answer("📭 Нет доступных мероприятий", show_alert=True)
-                return
-
-            # Создаем клавиатуру с рассылками
-            builder = InlineKeyboardBuilder()
-            for broadcast in broadcasts:
-                text_preview = broadcast.text[:40].strip() + "..." if broadcast.text and len(
-                    broadcast.text) > 40 else broadcast.text or "Нет описания"
-                builder.row(
-                    InlineKeyboardButton(
-                        text=text_preview,
-                        callback_data=f"view_broadcast_{broadcast.id}"
-                    )
-                )
-
-            await callback.message.edit_text(
-                f"📅 Доступные мероприятия по курсу <b>{course.name}</b>:",
-                parse_mode="HTML",
-                reply_markup=builder.as_markup()
-            )
+        await state.update_data(
+            last_messages=new_messages,
+            current_index=new_index
+        )
 
     except Exception as e:
-        print(f"Ошибка в back_to_broadcasts_list: {str(e)}")
-        await callback.answer("⚠️ Ошибка при загрузке списка", show_alert=True)
+        await callback.answer("Ошибка при загрузке", show_alert=True)

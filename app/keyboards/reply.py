@@ -17,20 +17,9 @@ kb_main = ReplyKeyboardMarkup(keyboard=[
 
 
 
-# Клавиатура Профиля
-kb_profile = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="Изменить курс"),
-     KeyboardButton(text="Назад")]
-],
-    resize_keyboard=True
-)
-
-
-
 # =====================================================================================
 # ------------------------------- Административный раздел -----------------------------
 # =====================================================================================
-
 
 
 # Кнопка выхода из админ-панели
@@ -39,36 +28,3 @@ kb_admin_main = ReplyKeyboardMarkup(keyboard=[
 ],
     resize_keyboard=True
 )
-
-
-
-
-kb_specializations_courses = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text= 'Специализации'), KeyboardButton(text='Курсы')],
-    [KeyboardButton(text='Назад')],
-],
-    resize_keyboard=True
-)
-
-
-async def specializations_keyboard():
-    builder = ReplyKeyboardBuilder()
-    builder.button(text='Просмотр')
-    builder.button(text='Добавить')
-    builder.button(text='Изменить')
-    builder.button(text='Удалить')
-    builder.button(text='Назад')
-    builder.adjust(2, 2, 1)
-    return builder.as_markup(
-        resize_keyboard=True,
-    )
-
-
-kb_courses = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='Просмотр'), KeyboardButton(text='Добавить')],
-    [KeyboardButton(text='Изменить'), KeyboardButton(text='Удалить')],
-    [KeyboardButton(text='Назад')],
-],
-    resize_keyboard=True,
-)
-

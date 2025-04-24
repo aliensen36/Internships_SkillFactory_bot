@@ -308,7 +308,7 @@ async def send_broadcast_with_pagination(
             text="Назад к проекту",
             callback_data=f"view_project_{project_id}"
         )
-        builder.adjust(1)
+        builder.adjust(2)
         markup = builder.as_markup()
 
         # Список для хранения ID ВСЕХ отправленных сообщений

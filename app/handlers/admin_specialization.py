@@ -11,7 +11,6 @@ from app.filters.chat_types import ChatTypeFilter, IsAdmin
 from app.fsm_states import *
 from app.keyboards.inline import admin_specializations_menu, confirm_cancel_add_specializations, \
     confirm_cancel_edit_specializations, admin_main_menu, confirm_delete_specializations
-from app.keyboards.reply import kb_specializations_courses, kb_courses, specializations_keyboard
 from database.models import *
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text

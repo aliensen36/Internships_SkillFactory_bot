@@ -29,11 +29,26 @@ async def profile_handler(message: Message,
     if user:
         specialization = user.specialization.name if user.specialization else "не выбрано"
         course = user.course.name if user.course else "не выбран"
+
+        # Создаем клавиатуру с кнопкой "Все доступные мероприятия"
+        builder = InlineKeyboardBuilder()
+        if user.course_id:  # Добавляем кнопку только если курс выбран
+            builder.row(
+                InlineKeyboardButton(
+                    text="Все доступные мероприятия по моему курсу",
+                    callback_data=f"view_course_events_{user.course_id}"
+                )
+            )
+
+        # Сохраняем основную клавиатуру профиля
+        reply_markup = builder.as_markup() if user.course_id else kb_profile
+
         await message.answer(
             f"🔸 Выбрана специализация:\n<b>{specialization}</b>\n\n"
             f"🔹 Выбран курс:\n<b>{course}</b>",
             parse_mode="HTML",
-            reply_markup=kb_profile
+            # reply_markup=kb_profile
+            reply_markup = reply_markup
         )
     else:
         await message.answer("Профиль не найден. Попробуй снова /start.")
@@ -194,3 +209,87 @@ async def paginate_courses(callback: CallbackQuery, session: AsyncSession):
         await callback.message.edit_reply_markup(reply_markup=keyboard)
     except TelegramBadRequest:
         pass  # Игнорируем, если клавиатура не изменилась
+
+
+@profile_router.callback_query(F.data.startswith("view_course_events_"))
+async def view_course_events(callback: CallbackQuery, session: AsyncSession):
+    try:
+        # Получаем ID курса из callback данных
+        course_id = int(callback.data.split("_")[-1])
+
+        async with session.begin():
+            # Проверяем существование курса
+            course = await session.get(Course, course_id)
+            if not course:
+                await callback.answer("❌ Курс не найден", show_alert=True)
+                return
+
+            # Получаем ВСЕ активные рассылки для этого курса
+            stmt = (
+                select(Broadcast)
+                .join(Broadcast.course_associations)
+                .options(selectinload(Broadcast.project))
+                .where(
+                    Broadcast.is_sent == True,
+                    Broadcast.is_active == True,
+                    BroadcastCourseAssociation.course_id == course_id
+                )
+                .order_by(Broadcast.created.desc())
+            )
+
+            broadcasts = (await session.scalars(stmt)).all()
+
+            if not broadcasts:
+                await callback.answer("📭 Нет доступных мероприятий для вашего курса", show_alert=True)
+                return
+
+            # Создаем клавиатуру с рассылками
+            builder = InlineKeyboardBuilder()
+
+            for broadcast in broadcasts:
+                # Формируем текст кнопки
+                button_parts = []
+
+                if broadcast.project:
+                    button_parts.append(broadcast.project.title)
+
+                # button_parts.append("Мероприятие")
+                button_parts.append(broadcast.created.strftime('%d.%m.%Y'))
+
+                button_text = ": ".join(filter(None, button_parts))
+
+                # Обрезаем длинный текст
+                button_text = button_text[:50] + "..." if len(button_text) > 50 else button_text
+
+                builder.row(
+                    InlineKeyboardButton(
+                        text=button_text,
+                        callback_data=f"view_broadcast_{broadcast.id}"
+                    )
+                )
+
+            builder.row(
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_profile"
+                )
+            )
+
+            await callback.message.edit_text(
+                f"📅 Доступные мероприятия по курсу <b>{course.name}</b>:",
+                parse_mode="HTML",
+                reply_markup=builder.as_markup()
+            )
+
+    except ValueError:
+        await callback.answer("❌ Ошибка: некорректный ID курса", show_alert=True)
+    except Exception as e:
+        print(f"Ошибка в view_course_events: {str(e)}")
+        await callback.answer("⚠️ Произошла ошибка при загрузке мероприятий", show_alert=True)
+
+
+@profile_router.callback_query(F.data == "back_to_profile")
+async def back_to_profile_handler(callback: CallbackQuery, session: AsyncSession):
+    # Повторно вызываем обработчик профиля
+    await profile_handler(callback.message, session)
+    await callback.answer()

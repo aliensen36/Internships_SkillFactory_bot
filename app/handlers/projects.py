@@ -296,12 +296,12 @@ async def send_broadcast_with_pagination(
         builder = InlineKeyboardBuilder()
         if index > 0:
             builder.button(
-                text="Предыдущая",
+                text="⬅️ Назад",
                 callback_data=f"prev_broadcast_{project_id}_{index}_{user_course_id}"
             )
         if index < total - 1:
             builder.button(
-                text="Следующая",
+                text="➡️ Вперед",
                 callback_data=f"next_broadcast_{project_id}_{index}_{user_course_id}"
             )
         builder.button(
